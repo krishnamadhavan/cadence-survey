@@ -81,6 +81,6 @@ Next.js stays on the host so hot reload stays fast on macOS. Compose is the data
 - `responses` — one row per submit, with `team_id`
 - `answers` — jsonb `{ "value": ... }` per question
 
-Scale averages under 3.0 are marked **low**, under 3.5 **watch**. Teams are sorted worst first.
+Scale averages under 3.0 are marked **low**, under 3.5 **watch**. Teams are sorted worst first. A team is only named when it has at least 3 responses; smaller groups are omitted or folded into “Too few to show” so a single person cannot be read off the results.
 
 To add another survey later, insert a `surveys` row plus `questions`, or extend `src/db/seed.ts`.
