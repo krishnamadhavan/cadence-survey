@@ -1,0 +1,50 @@
+# Local data stores. Next.js runs on the host (`pnpm dev`).
+#
+#   make setup    # start DBs, migrate, seed
+#   make dev      # http://localhost:3000
+#
+# Default host ports (see `.env`): Postgres 5435, Redis 6380.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cadence-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cadence}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cadence}
+      POSTGRES_DB: ${POSTGRES_DB:-cadence}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - cadence_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-cadence} -d ${POSTGRES_DB:-cadence}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    container_name: cadence-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - cadence_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  cadence_pgdata:
+  cadence_redis:
