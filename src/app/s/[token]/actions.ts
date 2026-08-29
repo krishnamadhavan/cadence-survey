@@ -29,6 +29,7 @@ export async function submitSurvey(
     return { error: "Missing survey." };
   }
 
+  const teamId = String(formData.get("teamId") ?? "").trim() || null;
   const incoming = [...formData.entries()]
     .filter(([key]) => key.startsWith("q_"))
     .map(([key, value]) => ({
@@ -37,7 +38,12 @@ export async function submitSurvey(
     }));
 
   const headerStore = await headers();
-  const result = await submitSurveyResponse(token, incoming, readIp(headerStore));
+  const result = await submitSurveyResponse(
+    token,
+    incoming,
+    readIp(headerStore),
+    teamId,
+  );
 
   if (!result.ok) {
     return { error: result.error };

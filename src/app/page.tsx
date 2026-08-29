@@ -70,7 +70,13 @@ export default async function Home() {
         </section>
       )}
 
-      <dl className="mt-14 grid grid-cols-2 gap-4 text-sm text-ink/60 sm:grid-cols-4">
+      <p className="mt-12 text-sm text-ink/45">
+        <Link href="/admin" className="underline-offset-4 hover:text-ink hover:underline">
+          Admin results
+        </Link>
+      </p>
+
+      <dl className="mt-8 grid grid-cols-2 gap-4 text-sm text-ink/60 sm:grid-cols-4">
         <div>
           <dt className="text-ink/40">App</dt>
           <dd className="mt-1 text-ink">Next.js + TS</dd>

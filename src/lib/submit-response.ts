@@ -1,6 +1,7 @@
+import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getSurveyByToken } from "@/db/queries";
-import { answers, responses } from "@/db/schema";
+import { answers, responses, teams } from "@/db/schema";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
 import { limitSurveySubmit } from "@/lib/rate-limit";
 
@@ -17,6 +18,7 @@ export async function submitSurveyResponse(
   token: string,
   incoming: IncomingAnswer[],
   ip: string,
+  teamId: string | null,
 ): Promise<SubmitResult> {
   const survey = await getSurveyByToken(token);
   if (!survey || survey.status !== "open") {
@@ -42,6 +44,20 @@ export async function submitSurveyResponse(
       status: 503,
       error: "Could not reach Redis. Is Docker running?",
     };
+  }
+
+  if (!teamId) {
+    return { ok: false, status: 400, error: "Pick your team." };
+  }
+
+  const [team] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+
+  if (!team) {
+    return { ok: false, status: 400, error: "Pick a valid team." };
   }
 
   const byId = new Map(incoming.map((item) => [item.questionId, item.value]));
@@ -101,7 +117,7 @@ export async function submitSurveyResponse(
     const responseId = await db.transaction(async (tx) => {
       const [response] = await tx
         .insert(responses)
-        .values({ surveyId: survey.id })
+        .values({ surveyId: survey.id, teamId: team.id })
         .returning({ id: responses.id });
 
       if (parsed.length > 0) {
