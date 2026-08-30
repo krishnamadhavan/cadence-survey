@@ -21,12 +21,20 @@ test("folds a named team when the leftover would be 1–2 people", () => {
     { key: "design", count: 2 },
   ]);
 
-  assert.ok(!plan.namedKeys.includes("design"));
+  assert.deepEqual(plan.namedKeys, ["ops"]);
+  assert.deepEqual(plan.suppressedKeys.sort(), ["design", "eng"]);
   assert.equal(plan.showSuppressedBucket, true);
-  assert.ok(plan.suppressedKeys.includes("design"));
-  assert.ok(plan.suppressedKeys.length >= 2);
-  const namedCount = plan.namedKeys.length;
-  assert.ok(namedCount <= 1);
+});
+
+test("un-names the last visible team when a remainder of 1–2 would leak", () => {
+  const plan = planTeamPublish([
+    { key: "eng", count: 5 },
+    { key: "product", count: 2 },
+  ]);
+
+  assert.deepEqual(plan.namedKeys, []);
+  assert.deepEqual(plan.suppressedKeys.sort(), ["eng", "product"]);
+  assert.equal(plan.showSuppressedBucket, true);
 });
 
 test("shows no team names when everyone is below the minimum", () => {
