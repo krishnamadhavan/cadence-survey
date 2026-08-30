@@ -153,6 +153,16 @@ export function buildResultsCsv(results: SurveyResults): string {
     }
   }
 
+  lines.push("");
+  lines.push(csvLine(["Question", "Team", "Comment"]));
+  if (results.comments.length === 0) {
+    lines.push(csvLine(["No written comments."]));
+  } else {
+    for (const comment of results.comments) {
+      lines.push(csvLine([comment.question, comment.teamName, comment.text]));
+    }
+  }
+
   // Excel on Windows opens UTF-8 more reliably with a BOM.
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
@@ -278,6 +288,21 @@ export async function buildResultsXlsx(results: SurveyResults): Promise<Buffer> 
   questions.getColumn(7).width = 10;
   questions.getColumn(8).width = 10;
   questions.getColumn(8).numFmt = "0%";
+
+  const comments = workbook.addWorksheet("Comments");
+  comments.addRow(["Question", "Team", "Comment"]);
+  comments.getRow(1).font = { bold: true };
+  if (results.comments.length === 0) {
+    comments.addRow(["No written comments."]);
+  } else {
+    for (const comment of results.comments) {
+      comments.addRow([comment.question, comment.teamName, comment.text]);
+    }
+  }
+  comments.getColumn(1).width = 48;
+  comments.getColumn(2).width = 22;
+  comments.getColumn(3).width = 80;
+  comments.getColumn(3).alignment = { wrapText: true, vertical: "top" };
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);

@@ -41,7 +41,7 @@ curl -sS http://localhost:3000/api/admin/surveys/weekly-pulse/results \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
-Download the same published numbers (CSV or Excel) from the results page, or:
+Download the same published numbers (CSV or Excel) from the results page. The file includes written comments; team names on those rows follow the same 3-response floor. Or:
 
 ```bash
 curl -sS -O -J "http://localhost:3000/api/admin/surveys/weekly-pulse/export?format=csv" \

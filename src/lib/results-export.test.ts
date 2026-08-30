@@ -59,19 +59,32 @@ const sample: SurveyResults = {
       position: 2,
       scale: null,
       choice: null,
-      text: { count: 4 },
+      text: { count: 2 },
+    },
+  ],
+  comments: [
+    {
+      question: "One thing we should keep doing?",
+      teamName: "Operations",
+      text: "On-call is brutal.",
+    },
+    {
+      question: "One thing we should keep doing?",
+      teamName: "Too few to show",
+      text: "Keep Friday demos.",
     },
   ],
 };
 
-test("csv uses the published team names and never writes comment text", () => {
+test("csv includes written comments with published team names only", () => {
   const csv = buildResultsCsv(sample);
 
   assert.match(csv, /Weekly pulse/);
   assert.match(csv, /Operations/);
   assert.match(csv, /Too few to show/);
   assert.match(csv, /2\.3/);
+  assert.match(csv, /On-call is brutal\./);
+  assert.match(csv, /Keep Friday demos\./);
   assert.doesNotMatch(csv, /Design/);
-  assert.doesNotMatch(csv, /Keep Friday demos/);
   assert.match(csv, /One thing we should keep doing\?/);
 });

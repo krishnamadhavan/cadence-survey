@@ -6,6 +6,7 @@ import {
   SUPPRESSED_TEAM_KEY,
   SUPPRESSED_TEAM_NAME,
   planTeamPublish,
+  publishedTeamName,
   teamPublishKey,
 } from "@/lib/min-cell";
 
@@ -62,6 +63,12 @@ export type TeamSummary = {
   health: TeamHealth;
 };
 
+export type WrittenComment = {
+  question: string;
+  teamName: string;
+  text: string;
+};
+
 export type SurveyResults = {
   survey: {
     id: string;
@@ -73,6 +80,7 @@ export type SurveyResults = {
   };
   teams: TeamSummary[];
   questions: QuestionResults[];
+  comments: WrittenComment[];
 };
 
 function round1(value: number): number {
@@ -476,5 +484,37 @@ export async function getSurveyResults(
     },
     teams: teamSummaries,
     questions: questionResults,
+    comments: collectComments(surveyQuestions, answersByQuestion, namedKeys),
   };
+}
+
+function collectComments(
+  surveyQuestions: { id: string; prompt: string; type: string; position: number }[],
+  answersByQuestion: Map<string, { teamId: string | null; teamName: string | null; value: { value: string | number } | null }[]>,
+  namedKeys: Set<string>,
+): WrittenComment[] {
+  const comments: WrittenComment[] = [];
+
+  for (const question of surveyQuestions) {
+    if (question.type !== "text") {
+      continue;
+    }
+    for (const row of answersByQuestion.get(question.id) ?? []) {
+      const text = stringValue(row.value?.value).trim();
+      if (!text) {
+        continue;
+      }
+      comments.push({
+        question: question.prompt,
+        teamName: publishedTeamName(
+          teamPublishKey(row.teamId),
+          row.teamName ?? UNASSIGNED,
+          namedKeys,
+        ),
+        text,
+      });
+    }
+  }
+
+  return comments;
 }
