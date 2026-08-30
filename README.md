@@ -41,6 +41,15 @@ curl -sS http://localhost:3000/api/admin/surveys/weekly-pulse/results \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
+Download the same published numbers (CSV or Excel) from the results page, or:
+
+```bash
+curl -sS -O -J "http://localhost:3000/api/admin/surveys/weekly-pulse/export?format=csv" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -sS -O -J "http://localhost:3000/api/admin/surveys/weekly-pulse/export?format=xlsx" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
 ## Everyday commands
 
 | Command | What it does |
@@ -64,7 +73,7 @@ src/app/s/[token]                      Public survey + submit + thanks
 src/app/admin                          Results (token-gated)
 src/app/api/health                     Postgres + Redis ping
 src/app/api/surveys/[token]/responses  JSON submit (same path as the form)
-src/app/api/admin/surveys/...          Results JSON
+src/app/api/admin/surveys/...          Results JSON and CSV/Excel export
 src/db/schema.ts       surveys, questions, responses, answers, teams
 src/db/seed.ts         weekly-pulse + teams + demo responses
 src/lib/redis.ts       ioredis singleton

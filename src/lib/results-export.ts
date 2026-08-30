@@ -1,0 +1,284 @@
+import ExcelJS from "exceljs";
+import type { SurveyResults, TeamHealth } from "@/db/results";
+
+export type ExportFormat = "csv" | "xlsx";
+
+function healthLabel(health: TeamHealth): string {
+  if (health === "low") {
+    return "Low";
+  }
+  if (health === "watch") {
+    return "Watch";
+  }
+  return "Ok";
+}
+
+function formatScore(value: number | null): string {
+  if (value === null) {
+    return "";
+  }
+  return value.toFixed(1);
+}
+
+function csvCell(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  const text = String(value);
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+
+function csvLine(cells: (string | number | null | undefined)[]): string {
+  return cells.map(csvCell).join(",");
+}
+
+export function resultsFilename(token: string, format: ExportFormat): string {
+  const day = new Date().toISOString().slice(0, 10);
+  return `${token}-results-${day}.${format}`;
+}
+
+export function buildResultsCsv(results: SurveyResults): string {
+  const lines: string[] = [
+    csvLine(["Survey", results.survey.title]),
+    csvLine(["Token", results.survey.publicToken]),
+    csvLine(["Responses", results.survey.responseCount]),
+    csvLine(["Average score", formatScore(results.survey.averageScore)]),
+    "",
+    csvLine(["Team", "Responses", "Average score", "Status"]),
+  ];
+
+  if (results.teams.length === 0) {
+    lines.push(csvLine(["Not enough responses per team to show a breakdown."]));
+  } else {
+    for (const team of results.teams) {
+      lines.push(
+        csvLine([
+          team.teamName,
+          team.responseCount,
+          formatScore(team.averageScore),
+          healthLabel(team.health),
+        ]),
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push(csvLine(["Question", "Type", "Team", "Average", "Answers", "Choice", "Count", "Percent"]));
+
+  for (const question of results.questions) {
+    if (question.scale) {
+      lines.push(
+        csvLine([
+          question.prompt,
+          "scale",
+          "Overall",
+          formatScore(question.scale.average),
+          question.scale.count,
+          "",
+          "",
+          "",
+        ]),
+      );
+      for (const team of question.scale.byTeam) {
+        lines.push(
+          csvLine([
+            question.prompt,
+            "scale",
+            team.teamName,
+            formatScore(team.average),
+            team.count,
+            "",
+            "",
+            "",
+          ]),
+        );
+      }
+    }
+
+    if (question.choice) {
+      for (const option of question.choice.options) {
+        const n = question.choice.counts[option] ?? 0;
+        const pct = question.choice.count
+          ? Math.round((n / question.choice.count) * 100)
+          : 0;
+        lines.push(
+          csvLine([
+            question.prompt,
+            "choice",
+            "Overall",
+            "",
+            question.choice.count,
+            option,
+            n,
+            `${pct}%`,
+          ]),
+        );
+      }
+      for (const team of question.choice.byTeam) {
+        for (const option of question.choice.options) {
+          const n = team.counts[option] ?? 0;
+          const pct = team.count ? Math.round((n / team.count) * 100) : 0;
+          lines.push(
+            csvLine([
+              question.prompt,
+              "choice",
+              team.teamName,
+              "",
+              team.count,
+              option,
+              n,
+              `${pct}%`,
+            ]),
+          );
+        }
+      }
+    }
+
+    if (question.text) {
+      lines.push(
+        csvLine([
+          question.prompt,
+          "text",
+          "Overall",
+          "",
+          question.text.count,
+          "",
+          "",
+          "",
+        ]),
+      );
+    }
+  }
+
+  // Excel on Windows opens UTF-8 more reliably with a BOM.
+  return `\uFEFF${lines.join("\r\n")}\r\n`;
+}
+
+export async function buildResultsXlsx(results: SurveyResults): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Cadence";
+  workbook.created = new Date();
+
+  const summary = workbook.addWorksheet("Summary");
+  summary.addRow(["Survey", results.survey.title]);
+  summary.addRow(["Token", results.survey.publicToken]);
+  summary.addRow(["Responses", results.survey.responseCount]);
+  summary.addRow(["Average score", results.survey.averageScore]);
+  summary.getColumn(1).width = 18;
+  summary.getColumn(2).width = 40;
+
+  const teams = workbook.addWorksheet("Teams");
+  teams.addRow(["Team", "Responses", "Average score", "Status"]);
+  teams.getRow(1).font = { bold: true };
+  if (results.teams.length === 0) {
+    teams.addRow(["Not enough responses per team to show a breakdown."]);
+  } else {
+    for (const team of results.teams) {
+      teams.addRow([
+        team.teamName,
+        team.responseCount,
+        team.averageScore,
+        healthLabel(team.health),
+      ]);
+    }
+  }
+  teams.getColumn(1).width = 28;
+  teams.getColumn(2).width = 14;
+  teams.getColumn(3).width = 16;
+  teams.getColumn(4).width = 10;
+
+  const questions = workbook.addWorksheet("Questions");
+  questions.addRow([
+    "Question",
+    "Type",
+    "Team",
+    "Average",
+    "Answers",
+    "Choice",
+    "Count",
+    "Percent",
+  ]);
+  questions.getRow(1).font = { bold: true };
+
+  for (const question of results.questions) {
+    if (question.scale) {
+      questions.addRow([
+        question.prompt,
+        "scale",
+        "Overall",
+        question.scale.average,
+        question.scale.count,
+      ]);
+      for (const team of question.scale.byTeam) {
+        questions.addRow([
+          question.prompt,
+          "scale",
+          team.teamName,
+          team.average,
+          team.count,
+        ]);
+      }
+    }
+
+    if (question.choice) {
+      for (const option of question.choice.options) {
+        const n = question.choice.counts[option] ?? 0;
+        const pct = question.choice.count
+          ? Math.round((n / question.choice.count) * 100)
+          : 0;
+        questions.addRow([
+          question.prompt,
+          "choice",
+          "Overall",
+          null,
+          question.choice.count,
+          option,
+          n,
+          pct / 100,
+        ]);
+      }
+      for (const team of question.choice.byTeam) {
+        for (const option of question.choice.options) {
+          const n = team.counts[option] ?? 0;
+          const pct = team.count ? Math.round((n / team.count) * 100) : 0;
+          questions.addRow([
+            question.prompt,
+            "choice",
+            team.teamName,
+            null,
+            team.count,
+            option,
+            n,
+            pct / 100,
+          ]);
+        }
+      }
+    }
+
+    if (question.text) {
+      questions.addRow([
+        question.prompt,
+        "text",
+        "Overall",
+        null,
+        question.text.count,
+      ]);
+    }
+  }
+
+  questions.getColumn(1).width = 48;
+  questions.getColumn(2).width = 10;
+  questions.getColumn(3).width = 22;
+  questions.getColumn(4).width = 12;
+  questions.getColumn(5).width = 12;
+  questions.getColumn(6).width = 22;
+  questions.getColumn(7).width = 10;
+  questions.getColumn(8).width = 10;
+  questions.getColumn(8).numFmt = "0%";
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}

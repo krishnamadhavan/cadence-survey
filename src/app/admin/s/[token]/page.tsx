@@ -5,6 +5,7 @@ import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
 import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
 import { hasAdminSession } from "@/lib/admin";
 import { logoutAdmin } from "../../login/actions";
+import { ExportButtons } from "./export-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -65,14 +66,17 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
             </Link>
           </p>
         </div>
-        <form action={logoutAdmin}>
-          <button
-            type="submit"
-            className="text-sm text-ink/50 underline-offset-4 hover:text-ink hover:underline"
-          >
-            Log out
-          </button>
-        </form>
+        <div className="flex flex-col items-end gap-3">
+          <form action={logoutAdmin}>
+            <button
+              type="submit"
+              className="text-sm text-ink/50 underline-offset-4 hover:text-ink hover:underline"
+            >
+              Log out
+            </button>
+          </form>
+          <ExportButtons token={results.survey.publicToken} />
+        </div>
       </header>
 
       <section className="mt-10 grid gap-3 sm:grid-cols-3">
