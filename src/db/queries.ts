@@ -1,6 +1,6 @@
 import { asc, count, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { questions, responses, surveys } from "@/db/schema";
+import { questions, responses, surveys, teams } from "@/db/schema";
 import type { QuestionType, SurveyStatus } from "@/db/schema";
 
 export type SurveyQuestion = {
@@ -68,6 +68,39 @@ export async function getSurveyByToken(
     status: survey.status,
     questions: surveyQuestions,
   };
+}
+
+export async function listTeams() {
+  return db
+    .select({
+      id: teams.id,
+      name: teams.name,
+      slug: teams.slug,
+    })
+    .from(teams)
+    .orderBy(asc(teams.name));
+}
+
+export async function listSurveysForAdmin() {
+  const rows = await db
+    .select({
+      id: surveys.id,
+      title: surveys.title,
+      description: surveys.description,
+      publicToken: surveys.publicToken,
+      status: surveys.status,
+    })
+    .from(surveys)
+    .orderBy(asc(surveys.createdAt));
+
+  const withCounts = await Promise.all(
+    rows.map(async (survey) => ({
+      ...survey,
+      responseCount: await countResponses(survey.id),
+    })),
+  );
+
+  return withCounts;
 }
 
 export async function countResponses(surveyId: string): Promise<number> {

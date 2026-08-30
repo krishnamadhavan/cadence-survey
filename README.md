@@ -22,14 +22,23 @@ make dev               # http://localhost:3000
 
 Seeded public survey: [http://localhost:3000/s/weekly-pulse](http://localhost:3000/s/weekly-pulse)
 
+Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) (token from `ADMIN_TOKEN` in `.env`)
+
 Health (Postgres + Redis): [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-Public submit also accepts JSON:
+Public submit also accepts JSON. `teamId` is required so results can break down by team:
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/surveys/weekly-pulse/responses \
   -H 'content-type: application/json' \
-  -d '{"answers":[{"questionId":"<uuid>","value":4}]}'
+  -d '{"teamId":"<team-uuid>","answers":[{"questionId":"<uuid>","value":4}]}'
+```
+
+Admin results API (cookie from `/admin/login`, or a bearer token):
+
+```bash
+curl -sS http://localhost:3000/api/admin/surveys/weekly-pulse/results \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
 ## Everyday commands
@@ -52,10 +61,12 @@ Default host ports are **5435** (Postgres) and **6380** (Redis) so this stack do
 ```
 docker-compose.yml     Postgres + Redis only
 src/app/s/[token]                      Public survey + submit + thanks
+src/app/admin                          Results (token-gated)
 src/app/api/health                     Postgres + Redis ping
 src/app/api/surveys/[token]/responses  JSON submit (same path as the form)
-src/db/schema.ts       surveys, questions, responses, answers
-src/db/seed.ts         weekly-pulse demo
+src/app/api/admin/surveys/...          Results JSON
+src/db/schema.ts       surveys, questions, responses, answers, teams
+src/db/seed.ts         weekly-pulse + teams + demo responses
 src/lib/redis.ts       ioredis singleton
 src/lib/rate-limit.ts  submit throttle
 ```
@@ -65,8 +76,11 @@ Next.js stays on the host so hot reload stays fast on macOS. Compose is the data
 ## Data model
 
 - `surveys` — title, status (`draft` / `open` / `closed`), unique `public_token`
+- `teams` — Engineering, Product, Design, Operations (seeded)
 - `questions` — `scale`, `choice`, or `text`
-- `responses` — one row per submit
+- `responses` — one row per submit, with `team_id`
 - `answers` — jsonb `{ "value": ... }` per question
+
+Scale averages under 3.0 are marked **low**, under 3.5 **watch**. Teams are sorted worst first.
 
 To add another survey later, insert a `surveys` row plus `questions`, or extend `src/db/seed.ts`.

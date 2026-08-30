@@ -5,21 +5,58 @@ import { submitSurvey, type SubmitState } from "./actions";
 import type { SurveyQuestion } from "@/db/queries";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
 
+type TeamOption = {
+  id: string;
+  name: string;
+};
+
 type SurveyFormProps = {
   token: string;
   questions: SurveyQuestion[];
+  teams: TeamOption[];
 };
 
-export function SurveyForm({ token, questions }: SurveyFormProps) {
+export function SurveyForm({ token, questions, teams }: SurveyFormProps) {
   const [state, action, pending] = useActionState<SubmitState, FormData>(
     submitSurvey,
     null,
   );
   const [values, setValues] = useState<Record<string, string>>({});
+  const [teamId, setTeamId] = useState("");
 
   return (
     <form action={action} className="flex flex-col gap-10">
       <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="teamId" value={teamId} />
+
+      <fieldset className="flex flex-col gap-3">
+        <legend className="flex flex-col gap-1">
+          <span className="text-xs font-medium tracking-wide text-ink/45 uppercase">
+            Your team
+          </span>
+          <span className="text-lg font-medium text-ink">Which team are you on?</span>
+        </legend>
+        <div className="flex flex-col gap-2">
+          {teams.map((team) => {
+            const selected = teamId === team.id;
+            return (
+              <button
+                key={team.id}
+                type="button"
+                onClick={() => setTeamId(team.id)}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                  selected
+                    ? "border-accent bg-accent/10 text-ink"
+                    : "border-ink/10 bg-paper text-ink hover:border-ink/30"
+                }`}
+                aria-pressed={selected}
+              >
+                {team.name}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       {questions.map((question, index) => (
         <fieldset key={question.id} className="flex flex-col gap-3">

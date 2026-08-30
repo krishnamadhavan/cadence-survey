@@ -1,0 +1,357 @@
+import { asc, eq } from "drizzle-orm";
+import { db } from "@/db/client";
+import { answers, questions, responses, surveys, teams } from "@/db/schema";
+import type { ChoiceOptions, QuestionType, ScaleOptions } from "@/db/schema";
+
+const UNASSIGNED = "Unassigned";
+const LOW_THRESHOLD = 3;
+const WATCH_THRESHOLD = 3.5;
+
+export type TeamHealth = "ok" | "watch" | "low";
+
+export type TeamQuestionScale = {
+  teamId: string | null;
+  teamName: string;
+  average: number | null;
+  count: number;
+};
+
+export type TeamQuestionChoice = {
+  teamId: string | null;
+  teamName: string;
+  count: number;
+  counts: Record<string, number>;
+};
+
+export type QuestionResults = {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  position: number;
+  scale: {
+    min: number;
+    max: number;
+    average: number | null;
+    count: number;
+    byTeam: TeamQuestionScale[];
+  } | null;
+  choice: {
+    options: string[];
+    count: number;
+    counts: Record<string, number>;
+    byTeam: TeamQuestionChoice[];
+  } | null;
+  text: {
+    count: number;
+  } | null;
+};
+
+export type TeamSummary = {
+  teamId: string | null;
+  teamName: string;
+  responseCount: number;
+  averageScore: number | null;
+  health: TeamHealth;
+};
+
+export type SurveyResults = {
+  survey: {
+    id: string;
+    title: string;
+    publicToken: string;
+    status: string;
+    responseCount: number;
+    averageScore: number | null;
+  };
+  teams: TeamSummary[];
+  questions: QuestionResults[];
+};
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  return round1(values.reduce((sum, n) => sum + n, 0) / values.length);
+}
+
+function healthFor(avg: number | null): TeamHealth {
+  if (avg === null) {
+    return "ok";
+  }
+  if (avg < LOW_THRESHOLD) {
+    return "low";
+  }
+  if (avg < WATCH_THRESHOLD) {
+    return "watch";
+  }
+  return "ok";
+}
+
+function numericValue(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw;
+  }
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function stringValue(raw: unknown): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (typeof raw === "number") {
+    return String(raw);
+  }
+  return "";
+}
+
+export async function getSurveyResults(
+  token: string,
+): Promise<SurveyResults | null> {
+  const [survey] = await db
+    .select()
+    .from(surveys)
+    .where(eq(surveys.publicToken, token))
+    .limit(1);
+
+  if (!survey) {
+    return null;
+  }
+
+  const surveyQuestions = await db
+    .select()
+    .from(questions)
+    .where(eq(questions.surveyId, survey.id))
+    .orderBy(asc(questions.position));
+
+  const rows = await db
+    .select({
+      responseId: responses.id,
+      teamId: teams.id,
+      teamName: teams.name,
+      questionId: questions.id,
+      questionType: questions.type,
+      value: answers.value,
+    })
+    .from(responses)
+    .leftJoin(teams, eq(responses.teamId, teams.id))
+    .leftJoin(answers, eq(answers.responseId, responses.id))
+    .leftJoin(questions, eq(answers.questionId, questions.id))
+    .where(eq(responses.surveyId, survey.id));
+
+  const responseMeta = new Map<
+    string,
+    { teamId: string | null; teamName: string }
+  >();
+  for (const row of rows) {
+    if (!responseMeta.has(row.responseId)) {
+      responseMeta.set(row.responseId, {
+        teamId: row.teamId,
+        teamName: row.teamName ?? UNASSIGNED,
+      });
+    }
+  }
+
+  const teamResponseIds = new Map<string, Set<string>>();
+  const teamScaleValues = new Map<string, number[]>();
+  const allScaleValues: number[] = [];
+
+  for (const meta of responseMeta.values()) {
+    const key = meta.teamId ?? UNASSIGNED;
+    const set = teamResponseIds.get(key) ?? new Set<string>();
+    teamResponseIds.set(key, set);
+  }
+
+  for (const [responseId, meta] of responseMeta) {
+    const key = meta.teamId ?? UNASSIGNED;
+    teamResponseIds.get(key)?.add(responseId);
+  }
+
+  const answersByQuestion = new Map<string, typeof rows>();
+  for (const row of rows) {
+    if (!row.questionId) {
+      continue;
+    }
+    const list = answersByQuestion.get(row.questionId) ?? [];
+    list.push(row);
+    answersByQuestion.set(row.questionId, list);
+  }
+
+  const questionResults: QuestionResults[] = surveyQuestions.map((question) => {
+    const questionRows = answersByQuestion.get(question.id) ?? [];
+
+    if (question.type === "scale") {
+      const options = question.options as ScaleOptions | null;
+      const min = options?.min ?? 1;
+      const max = options?.max ?? 5;
+      const values: number[] = [];
+      const byTeamValues = new Map<
+        string,
+        { teamId: string | null; teamName: string; values: number[] }
+      >();
+
+      for (const row of questionRows) {
+        const n = numericValue(row.value?.value);
+        if (n === null) {
+          continue;
+        }
+        values.push(n);
+        allScaleValues.push(n);
+        const key = row.teamId ?? UNASSIGNED;
+        const bucket = byTeamValues.get(key) ?? {
+          teamId: row.teamId,
+          teamName: row.teamName ?? UNASSIGNED,
+          values: [],
+        };
+        bucket.values.push(n);
+        byTeamValues.set(key, bucket);
+        const teamScores = teamScaleValues.get(key) ?? [];
+        teamScores.push(n);
+        teamScaleValues.set(key, teamScores);
+      }
+
+      const byTeam = [...byTeamValues.values()]
+        .map((bucket) => ({
+          teamId: bucket.teamId,
+          teamName: bucket.teamName,
+          average: average(bucket.values),
+          count: bucket.values.length,
+        }))
+        .sort((a, b) => (a.average ?? 99) - (b.average ?? 99));
+
+      return {
+        id: question.id,
+        prompt: question.prompt,
+        type: question.type,
+        position: question.position,
+        scale: {
+          min,
+          max,
+          average: average(values),
+          count: values.length,
+          byTeam,
+        },
+        choice: null,
+        text: null,
+      };
+    }
+
+    if (question.type === "choice") {
+      const options = (question.options as ChoiceOptions | null)?.choices ?? [];
+      const counts: Record<string, number> = Object.fromEntries(
+        options.map((option) => [option, 0]),
+      );
+      const byTeamMap = new Map<
+        string,
+        { teamId: string | null; teamName: string; counts: Record<string, number>; count: number }
+      >();
+
+      for (const row of questionRows) {
+        const choice = stringValue(row.value?.value);
+        if (!choice) {
+          continue;
+        }
+        counts[choice] = (counts[choice] ?? 0) + 1;
+        const key = row.teamId ?? UNASSIGNED;
+        const bucket = byTeamMap.get(key) ?? {
+          teamId: row.teamId,
+          teamName: row.teamName ?? UNASSIGNED,
+          counts: Object.fromEntries(options.map((option) => [option, 0])),
+          count: 0,
+        };
+        bucket.counts[choice] = (bucket.counts[choice] ?? 0) + 1;
+        bucket.count += 1;
+        byTeamMap.set(key, bucket);
+      }
+
+      return {
+        id: question.id,
+        prompt: question.prompt,
+        type: question.type,
+        position: question.position,
+        scale: null,
+        choice: {
+          options,
+          count: questionRows.length,
+          counts,
+          byTeam: [...byTeamMap.values()].sort((a, b) =>
+            a.teamName.localeCompare(b.teamName),
+          ),
+        },
+        text: null,
+      };
+    }
+
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      type: question.type,
+      position: question.position,
+      scale: null,
+      choice: null,
+      text: { count: questionRows.length },
+    };
+  });
+
+  const knownTeams = await db
+    .select({ id: teams.id, name: teams.name })
+    .from(teams)
+    .orderBy(asc(teams.name));
+
+  const teamSummaries: TeamSummary[] = [];
+
+  for (const team of knownTeams) {
+    const avg = average(teamScaleValues.get(team.id) ?? []);
+    teamSummaries.push({
+      teamId: team.id,
+      teamName: team.name,
+      responseCount: teamResponseIds.get(team.id)?.size ?? 0,
+      averageScore: avg,
+      health: healthFor(avg),
+    });
+  }
+
+  if (teamResponseIds.has(UNASSIGNED)) {
+    const avg = average(teamScaleValues.get(UNASSIGNED) ?? []);
+    teamSummaries.push({
+      teamId: null,
+      teamName: UNASSIGNED,
+      responseCount: teamResponseIds.get(UNASSIGNED)?.size ?? 0,
+      averageScore: avg,
+      health: healthFor(avg),
+    });
+  }
+
+  teamSummaries.sort((a, b) => {
+    if (a.averageScore === null && b.averageScore === null) {
+      return a.teamName.localeCompare(b.teamName);
+    }
+    if (a.averageScore === null) {
+      return 1;
+    }
+    if (b.averageScore === null) {
+      return -1;
+    }
+    return a.averageScore - b.averageScore;
+  });
+
+  return {
+    survey: {
+      id: survey.id,
+      title: survey.title,
+      publicToken: survey.publicToken,
+      status: survey.status,
+      responseCount: responseMeta.size,
+      averageScore: average(allScaleValues),
+    },
+    teams: teamSummaries,
+    questions: questionResults,
+  };
+}
