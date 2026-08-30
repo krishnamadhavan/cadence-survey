@@ -53,20 +53,26 @@ async function ensureAdmin(db: SeedDb) {
     throw new Error("ADMIN_PASSWORD must be at least 8 characters");
   }
 
+  const passwordHash = await hash(password, 12);
   const [existing] = await db
     .select({ id: admins.id })
     .from(admins)
     .where(eq(admins.email, email))
     .limit(1);
 
-  if (existing) {
-    console.log(`Admin already present (${email}).`);
-    return;
-  }
+  await db
+    .insert(admins)
+    .values({ email, passwordHash })
+    .onConflictDoUpdate({
+      target: admins.email,
+      set: { passwordHash },
+    });
 
-  const passwordHash = await hash(password, 12);
-  await db.insert(admins).values({ email, passwordHash });
-  console.log(`Seeded admin ${email}.`);
+  console.log(
+    existing
+      ? `Updated admin password for ${email}.`
+      : `Seeded admin ${email}.`,
+  );
 }
 
 async function ensureSurvey(db: SeedDb) {

@@ -3,11 +3,14 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifyAdminCredentials } from "@/lib/auth";
+import { readLoginClientIp } from "@/lib/client-ip";
+import { env } from "@/lib/env";
 import { limitAdminLogin } from "@/lib/rate-limit";
 import {
   SESSION_COOKIE,
   createAdminSession,
   destroyAdminSession,
+  sessionCookieClearOptions,
   sessionCookieOptions,
 } from "@/lib/session";
 
@@ -22,23 +25,19 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
-function readIp(headerStore: Headers): string {
-  const forwarded = headerStore.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim() || "unknown";
-  }
-  return headerStore.get("x-real-ip") ?? "unknown";
-}
-
 export async function loginAdmin(
   _prev: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+  const ip = readLoginClientIp(
+    await headers(),
+    env.TRUST_PROXY === "true",
+  );
 
   try {
-    const limited = await limitAdminLogin(readIp(await headers()));
+    const limited = await limitAdminLogin(email, ip);
     if (!limited.ok) {
       return {
         error: `Too many sign-in attempts. Try again in ${limited.retryAfterSeconds}s.`,
@@ -74,7 +73,11 @@ export async function loginAdmin(
 
 export async function logoutAdmin() {
   const jar = await cookies();
-  await destroyAdminSession(jar.get(SESSION_COOKIE)?.value);
-  jar.delete(SESSION_COOKIE);
+  const token = jar.get(SESSION_COOKIE)?.value;
+  try {
+    await destroyAdminSession(token);
+  } finally {
+    jar.set(SESSION_COOKIE, "", sessionCookieClearOptions());
+  }
   redirect("/admin/login");
 }

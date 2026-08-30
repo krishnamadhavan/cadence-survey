@@ -1,11 +1,10 @@
-import { compare } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { admins } from "@/db/schema";
 import { normalizeEmail } from "@/lib/email";
+import { matchAdminPassword } from "@/lib/password";
 
-const DUMMY_HASH =
-  "$2b$12$pjb4XxJS8c8roYWL/bxgTuEHZw0ISnsvXO7F6XNvEuij7yKyv5BI.";
+export { matchAdminPassword } from "@/lib/password";
 
 export async function verifyAdminCredentials(
   email: string,
@@ -13,7 +12,7 @@ export async function verifyAdminCredentials(
 ): Promise<{ id: string; email: string } | null> {
   const normalized = normalizeEmail(email);
   if (!normalized || !password) {
-    await compare(password || "x", DUMMY_HASH);
+    await matchAdminPassword(password, undefined);
     return null;
   }
 
@@ -27,7 +26,7 @@ export async function verifyAdminCredentials(
     .where(eq(admins.email, normalized))
     .limit(1);
 
-  const ok = await compare(password, admin?.passwordHash ?? DUMMY_HASH);
+  const ok = await matchAdminPassword(password, admin?.passwordHash);
   if (!admin || !ok) {
     return null;
   }

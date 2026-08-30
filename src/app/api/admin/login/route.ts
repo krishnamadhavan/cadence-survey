@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyAdminCredentials } from "@/lib/auth";
+import { readLoginClientIp } from "@/lib/client-ip";
+import { env } from "@/lib/env";
 import { limitAdminLogin } from "@/lib/rate-limit";
 import {
   SESSION_COOKIE,
@@ -14,14 +16,6 @@ const bodySchema = z.object({
   email: z.string().min(1),
   password: z.string().min(1),
 });
-
-function readIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim() || "unknown";
-  }
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
 
 export async function POST(request: Request) {
   let json: unknown;
@@ -37,7 +31,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const limited = await limitAdminLogin(readIp(request));
+    const limited = await limitAdminLogin(
+      parsed.data.email,
+      readLoginClientIp(request.headers, env.TRUST_PROXY === "true"),
+    );
     if (!limited.ok) {
       return NextResponse.json(
         { error: `Too many sign-in attempts. Try again in ${limited.retryAfterSeconds}s.` },

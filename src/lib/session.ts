@@ -1,13 +1,23 @@
-import { randomBytes } from "node:crypto";
 import { env } from "@/lib/env";
 import { redis } from "@/lib/redis";
+import {
+  SESSION_TTL_SECONDS,
+  SessionStoreUnavailable,
+  createAdminSession as createStoredSession,
+  destroyAdminSession as destroyStoredSession,
+  readAdminSession as readStoredSession,
+  sessionKey,
+  type SessionStore,
+} from "@/lib/session-store";
+
+export {
+  SESSION_TTL_SECONDS,
+  SessionStoreUnavailable,
+  sessionKey,
+  type SessionStore,
+};
 
 export const SESSION_COOKIE = "cadence_session";
-export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
-
-function sessionKey(token: string): string {
-  return `session:admin:${token}`;
-}
 
 export function sessionCookieOptions() {
   return {
@@ -19,30 +29,30 @@ export function sessionCookieOptions() {
   };
 }
 
-export async function createAdminSession(adminId: string): Promise<string> {
-  const token = randomBytes(32).toString("hex");
-  await redis.set(sessionKey(token), adminId, "EX", SESSION_TTL_SECONDS);
-  return token;
+export function sessionCookieClearOptions() {
+  return {
+    ...sessionCookieOptions(),
+    maxAge: 0,
+  };
+}
+
+export async function createAdminSession(
+  adminId: string,
+  store: SessionStore = redis,
+): Promise<string> {
+  return createStoredSession(adminId, store);
 }
 
 export async function readAdminSession(
   token: string | null | undefined,
+  store: SessionStore = redis,
 ): Promise<{ adminId: string } | null> {
-  if (!token) {
-    return null;
-  }
-  const adminId = await redis.get(sessionKey(token));
-  if (!adminId) {
-    return null;
-  }
-  return { adminId };
+  return readStoredSession(token, store);
 }
 
 export async function destroyAdminSession(
   token: string | null | undefined,
+  store: SessionStore = redis,
 ): Promise<void> {
-  if (!token) {
-    return;
-  }
-  await redis.del(sessionKey(token));
+  return destroyStoredSession(token, store);
 }

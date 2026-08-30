@@ -1,3 +1,4 @@
+import { adminLoginEmailKey, adminLoginIpKey } from "@/lib/login-keys";
 import { redis } from "@/lib/redis";
 
 const WINDOW_SECONDS = 10 * 60;
@@ -9,22 +10,49 @@ export type RateLimitResult = {
   retryAfterSeconds: number;
 };
 
-export async function limitAdminLogin(ip: string): Promise<RateLimitResult> {
-  const key = `rl:admin-login:${ip}`;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
+const LOGIN_MAX_HITS = 5;
+const LOGIN_IP_MAX_HITS = 20;
+
+async function hitLimit(
+  key: string,
+  maxHits: number,
+  windowSeconds: number,
+): Promise<RateLimitResult> {
   const hits = await redis.incr(key);
 
   if (hits === 1) {
-    await redis.expire(key, WINDOW_SECONDS);
+    await redis.expire(key, windowSeconds);
   }
 
   const ttl = await redis.ttl(key);
-  const remaining = Math.max(0, MAX_HITS - hits);
+  const remaining = Math.max(0, maxHits - hits);
 
   return {
-    ok: hits <= MAX_HITS,
+    ok: hits <= maxHits,
     remaining,
-    retryAfterSeconds: ttl > 0 ? ttl : WINDOW_SECONDS,
+    retryAfterSeconds: ttl > 0 ? ttl : windowSeconds,
   };
+}
+
+export async function limitAdminLogin(
+  email: string,
+  ip: string,
+): Promise<RateLimitResult> {
+  const emailLimit = await hitLimit(
+    adminLoginEmailKey(email),
+    LOGIN_MAX_HITS,
+    LOGIN_WINDOW_SECONDS,
+  );
+  if (!emailLimit.ok) {
+    return emailLimit;
+  }
+
+  if (ip === "direct") {
+    return emailLimit;
+  }
+
+  return hitLimit(adminLoginIpKey(ip), LOGIN_IP_MAX_HITS, LOGIN_WINDOW_SECONDS);
 }
 
 export async function limitSurveySubmit(

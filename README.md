@@ -22,7 +22,7 @@ make dev               # http://localhost:3000
 
 Seeded public survey: [http://localhost:3000/s/weekly-pulse](http://localhost:3000/s/weekly-pulse)
 
-Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) — sign in with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`admin@cadence.local` / `cadence-admin` by default).
+Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) — sign in with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`admin@cadence.local` / `cadence-admin` by default). If you already have a `.env` from before this change, copy those two keys from `.env.example` and run `pnpm db:seed` again. Re-seeding updates that admin’s password to match `.env`.
 
 Health (Postgres + Redis): [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
