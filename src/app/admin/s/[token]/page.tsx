@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getSurveyResults } from "@/db/results";
+import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
+import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
 import { hasAdminSession } from "@/lib/admin";
 import { logoutAdmin } from "../../login/actions";
+import { ExportButtons } from "./export-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +42,10 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   }
 
   const struggling = results.teams.filter(
-    (team) => team.health !== "ok" && team.responseCount > 0,
+    (team) =>
+      team.health !== "ok" &&
+      team.responseCount > 0 &&
+      team.teamName !== SUPPRESSED_TEAM_NAME,
   );
 
   return (
@@ -61,14 +66,21 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
             </Link>
           </p>
         </div>
-        <form action={logoutAdmin}>
-          <button
-            type="submit"
-            className="text-sm text-ink/50 underline-offset-4 hover:text-ink hover:underline"
-          >
-            Log out
-          </button>
-        </form>
+        <div className="flex flex-col items-end gap-3">
+          <form action={logoutAdmin}>
+            <button
+              type="submit"
+              className="text-sm text-ink/50 underline-offset-4 hover:text-ink hover:underline"
+            >
+              Log out
+            </button>
+          </form>
+          <ExportButtons token={results.survey.publicToken} />
+          <p className="max-w-xs text-right text-xs text-ink/45">
+            CSV and Excel include written comments from teams that meet the
+            anonymity floor.
+          </p>
+        </div>
       </header>
 
       <section className="mt-10 grid gap-3 sm:grid-cols-3">
@@ -93,32 +105,47 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           By team
         </h2>
         <p className="mt-1 text-sm text-ink/55">
-          Sorted worst first. Low is under 3.0, watch is under 3.5.
+          Sorted worst first. Low is under 3.0, watch is under 3.5. Teams with
+          fewer than {MIN_TEAM_RESPONSES} responses are hidden so one person
+          cannot be identified.
         </p>
-        <div className="mt-4 overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
-          <table className="w-full min-w-[28rem] text-left text-sm">
-            <thead className="border-b border-ink/10 text-ink/45">
-              <tr>
-                <th className="px-4 py-3 font-medium">Team</th>
-                <th className="px-4 py-3 font-medium">Responses</th>
-                <th className="px-4 py-3 font-medium">Avg score</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.teams.map((team) => (
-                <tr key={team.teamId ?? "unassigned"} className="border-t border-ink/5">
-                  <td className="px-4 py-3 font-medium text-ink">{team.teamName}</td>
-                  <td className="px-4 py-3 text-ink/70">{team.responseCount}</td>
-                  <td className="px-4 py-3 text-ink">{formatScore(team.averageScore)}</td>
-                  <td className="px-4 py-3">
-                    <HealthBadge team={team} />
-                  </td>
+        {results.teams.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
+            Not enough responses per team to show a breakdown.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
+            <table className="w-full min-w-[28rem] text-left text-sm">
+              <thead className="border-b border-ink/10 text-ink/45">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Team</th>
+                  <th className="px-4 py-3 font-medium">Responses</th>
+                  <th className="px-4 py-3 font-medium">Avg score</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {results.teams.map((team) => (
+                  <tr
+                    key={team.teamId ?? "unassigned"}
+                    className="border-t border-ink/5"
+                  >
+                    <td className="px-4 py-3 font-medium text-ink">
+                      {team.teamName}
+                    </td>
+                    <td className="px-4 py-3 text-ink/70">{team.responseCount}</td>
+                    <td className="px-4 py-3 text-ink">
+                      {formatScore(team.averageScore)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <HealthBadge team={team} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="mt-12 flex flex-col gap-8">
