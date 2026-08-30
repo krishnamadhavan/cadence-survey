@@ -1,24 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSurveyResults } from "@/db/results";
+import { getPublishedComments, getSurveyResults } from "@/db/results";
 import { isAdminRequest } from "@/lib/admin";
 import {
   buildResultsCsv,
   buildResultsXlsx,
+  parseExportFormat,
   resultsFilename,
-  type ExportFormat,
 } from "@/lib/results-export";
 
 export const dynamic = "force-dynamic";
-
-function parseFormat(value: string | null): ExportFormat | null {
-  if (value === "csv") {
-    return "csv";
-  }
-  if (value === "xlsx" || value === "xls") {
-    return "xlsx";
-  }
-  return null;
-}
 
 export async function GET(
   request: Request,
@@ -29,7 +19,7 @@ export async function GET(
   }
 
   const { token } = await context.params;
-  const format = parseFormat(new URL(request.url).searchParams.get("format"));
+  const format = parseExportFormat(new URL(request.url).searchParams.get("format"));
   if (!format) {
     return NextResponse.json(
       { error: "Use format=csv or format=xlsx." },
@@ -43,10 +33,11 @@ export async function GET(
       return NextResponse.json({ error: "Survey not found." }, { status: 404 });
     }
 
+    const comments = (await getPublishedComments(token)) ?? [];
     const filename = resultsFilename(results.survey.publicToken, format);
 
     if (format === "csv") {
-      return new NextResponse(buildResultsCsv(results), {
+      return new NextResponse(buildResultsCsv(results, comments), {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
@@ -56,7 +47,7 @@ export async function GET(
       });
     }
 
-    const xlsx = await buildResultsXlsx(results);
+    const xlsx = await buildResultsXlsx(results, comments);
     return new NextResponse(new Uint8Array(xlsx), {
       status: 200,
       headers: {

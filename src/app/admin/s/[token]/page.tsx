@@ -77,7 +77,8 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           </form>
           <ExportButtons token={results.survey.publicToken} />
           <p className="max-w-xs text-right text-xs text-ink/45">
-            CSV and Excel include the written comments.
+            CSV and Excel include written comments from teams that meet the
+            anonymity floor.
           </p>
         </div>
       </header>

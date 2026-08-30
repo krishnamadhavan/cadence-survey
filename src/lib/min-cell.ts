@@ -58,14 +58,3 @@ export function planTeamPublish(
 export function teamPublishKey(teamId: string | null): string {
   return teamId ?? "unassigned";
 }
-
-export function publishedTeamName(
-  key: string,
-  realName: string,
-  namedKeys: Set<string>,
-): string {
-  if (namedKeys.has(key)) {
-    return realName;
-  }
-  return SUPPRESSED_TEAM_NAME;
-}

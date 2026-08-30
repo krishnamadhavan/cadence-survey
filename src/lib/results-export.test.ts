@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SurveyResults } from "@/db/results";
-import { buildResultsCsv } from "./results-export";
+import {
+  buildResultsCsv,
+  parseExportFormat,
+  resultsFilename,
+} from "./results-export";
+import { sanitizeFilenameToken, sanitizeSpreadsheetValue } from "./spreadsheet";
 
 const sample: SurveyResults = {
   survey: {
@@ -20,13 +25,6 @@ const sample: SurveyResults = {
       averageScore: 2.3,
       health: "low",
     },
-    {
-      teamId: "__suppressed__",
-      teamName: "Too few to show",
-      responseCount: 5,
-      averageScore: 4.1,
-      health: "ok",
-    },
   ],
   questions: [
     {
@@ -41,12 +39,6 @@ const sample: SurveyResults = {
         count: 8,
         byTeam: [
           { teamId: "ops", teamName: "Operations", average: 2.3, count: 3 },
-          {
-            teamId: "__suppressed__",
-            teamName: "Too few to show",
-            average: 4.1,
-            count: 5,
-          },
         ],
       },
       choice: null,
@@ -59,32 +51,64 @@ const sample: SurveyResults = {
       position: 2,
       scale: null,
       choice: null,
-      text: { count: 2 },
+      text: { count: 1 },
     },
   ],
-  comments: [
+};
+
+test("csv includes only the comments passed in", () => {
+  const csv = buildResultsCsv(sample, [
     {
       question: "One thing we should keep doing?",
       teamName: "Operations",
       text: "On-call is brutal.",
     },
-    {
-      question: "One thing we should keep doing?",
-      teamName: "Too few to show",
-      text: "Keep Friday demos.",
-    },
-  ],
-};
-
-test("csv includes written comments with published team names only", () => {
-  const csv = buildResultsCsv(sample);
+  ]);
 
   assert.match(csv, /Weekly pulse/);
   assert.match(csv, /Operations/);
-  assert.match(csv, /Too few to show/);
-  assert.match(csv, /2\.3/);
   assert.match(csv, /On-call is brutal\./);
-  assert.match(csv, /Keep Friday demos\./);
-  assert.doesNotMatch(csv, /Design/);
   assert.match(csv, /One thing we should keep doing\?/);
+});
+
+test("csv empty comments section when none are published", () => {
+  const csv = buildResultsCsv(sample, []);
+  assert.match(csv, /No written comments/);
+  assert.doesNotMatch(csv, /On-call is brutal/);
+});
+
+test("formula-prefixed comments are neutralized in csv", () => {
+  const csv = buildResultsCsv(sample, [
+    {
+      question: "Notes?",
+      teamName: "Operations",
+      text: "=1+2",
+    },
+  ]);
+  assert.match(csv, /'=1\+2/);
+  assert.doesNotMatch(csv, /(^|,)=1\+2/m);
+});
+
+test("parseExportFormat treats xls as xlsx", () => {
+  assert.equal(parseExportFormat("csv"), "csv");
+  assert.equal(parseExportFormat("xlsx"), "xlsx");
+  assert.equal(parseExportFormat("xls"), "xlsx");
+  assert.equal(parseExportFormat("pdf"), null);
+  assert.equal(parseExportFormat(null), null);
+});
+
+test("resultsFilename allowlists the token", () => {
+  const name = resultsFilename('weekly/"pulse\n', "xlsx");
+  assert.match(name, /^weekly-pulse-results-\d{4}-\d{2}-\d{2}\.xlsx$/);
+  assert.equal(sanitizeFilenameToken(""), "survey");
+  assert.equal(sanitizeFilenameToken("ok_token.1"), "ok_token.1");
+});
+
+test("sanitizeSpreadsheetValue prefixes formula starters", () => {
+  assert.equal(sanitizeSpreadsheetValue("=1+2"), "'=1+2");
+  assert.equal(sanitizeSpreadsheetValue("+cmd"), "'+cmd");
+  assert.equal(sanitizeSpreadsheetValue("-1"), "'-1");
+  assert.equal(sanitizeSpreadsheetValue("@SUM(A1)"), "'@SUM(A1)");
+  assert.equal(sanitizeSpreadsheetValue("Keep Friday demos."), "Keep Friday demos.");
+  assert.equal(sanitizeSpreadsheetValue(3.6), 3.6);
 });

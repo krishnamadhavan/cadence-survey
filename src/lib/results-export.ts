@@ -1,5 +1,10 @@
 import ExcelJS from "exceljs";
 import type { SurveyResults, TeamHealth } from "@/db/results";
+import type { WrittenComment } from "@/lib/comments";
+import {
+  sanitizeFilenameToken,
+  sanitizeSpreadsheetValue,
+} from "@/lib/spreadsheet";
 
 export type ExportFormat = "csv" | "xlsx";
 
@@ -21,10 +26,8 @@ function formatScore(value: number | null): string {
 }
 
 function csvCell(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  const text = String(value);
+  const sanitized = sanitizeSpreadsheetValue(value);
+  const text = String(sanitized);
   if (/[",\n\r]/.test(text)) {
     return `"${text.replaceAll('"', '""')}"`;
   }
@@ -35,12 +38,29 @@ function csvLine(cells: (string | number | null | undefined)[]): string {
   return cells.map(csvCell).join(",");
 }
 
-export function resultsFilename(token: string, format: ExportFormat): string {
-  const day = new Date().toISOString().slice(0, 10);
-  return `${token}-results-${day}.${format}`;
+function excelCells(values: (string | number | null | undefined)[]) {
+  return values.map((value) => sanitizeSpreadsheetValue(value));
 }
 
-export function buildResultsCsv(results: SurveyResults): string {
+export function parseExportFormat(value: string | null): ExportFormat | null {
+  if (value === "csv") {
+    return "csv";
+  }
+  if (value === "xlsx" || value === "xls") {
+    return "xlsx";
+  }
+  return null;
+}
+
+export function resultsFilename(token: string, format: ExportFormat): string {
+  const day = new Date().toISOString().slice(0, 10);
+  return `${sanitizeFilenameToken(token)}-results-${day}.${format}`;
+}
+
+export function buildResultsCsv(
+  results: SurveyResults,
+  comments: WrittenComment[] = [],
+): string {
   const lines: string[] = [
     csvLine(["Survey", results.survey.title]),
     csvLine(["Token", results.survey.publicToken]),
@@ -155,10 +175,10 @@ export function buildResultsCsv(results: SurveyResults): string {
 
   lines.push("");
   lines.push(csvLine(["Question", "Team", "Comment"]));
-  if (results.comments.length === 0) {
+  if (comments.length === 0) {
     lines.push(csvLine(["No written comments."]));
   } else {
-    for (const comment of results.comments) {
+    for (const comment of comments) {
       lines.push(csvLine([comment.question, comment.teamName, comment.text]));
     }
   }
@@ -167,14 +187,17 @@ export function buildResultsCsv(results: SurveyResults): string {
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
-export async function buildResultsXlsx(results: SurveyResults): Promise<Buffer> {
+export async function buildResultsXlsx(
+  results: SurveyResults,
+  comments: WrittenComment[] = [],
+): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Cadence";
   workbook.created = new Date();
 
   const summary = workbook.addWorksheet("Summary");
-  summary.addRow(["Survey", results.survey.title]);
-  summary.addRow(["Token", results.survey.publicToken]);
+  summary.addRow(excelCells(["Survey", results.survey.title]));
+  summary.addRow(excelCells(["Token", results.survey.publicToken]));
   summary.addRow(["Responses", results.survey.responseCount]);
   summary.addRow(["Average score", results.survey.averageScore]);
   summary.getColumn(1).width = 18;
@@ -187,12 +210,14 @@ export async function buildResultsXlsx(results: SurveyResults): Promise<Buffer> 
     teams.addRow(["Not enough responses per team to show a breakdown."]);
   } else {
     for (const team of results.teams) {
-      teams.addRow([
-        team.teamName,
-        team.responseCount,
-        team.averageScore,
-        healthLabel(team.health),
-      ]);
+      teams.addRow(
+        excelCells([
+          team.teamName,
+          team.responseCount,
+          team.averageScore,
+          healthLabel(team.health),
+        ]),
+      );
     }
   }
   teams.getColumn(1).width = 28;
@@ -215,21 +240,25 @@ export async function buildResultsXlsx(results: SurveyResults): Promise<Buffer> 
 
   for (const question of results.questions) {
     if (question.scale) {
-      questions.addRow([
-        question.prompt,
-        "scale",
-        "Overall",
-        question.scale.average,
-        question.scale.count,
-      ]);
-      for (const team of question.scale.byTeam) {
-        questions.addRow([
+      questions.addRow(
+        excelCells([
           question.prompt,
           "scale",
-          team.teamName,
-          team.average,
-          team.count,
-        ]);
+          "Overall",
+          question.scale.average,
+          question.scale.count,
+        ]),
+      );
+      for (const team of question.scale.byTeam) {
+        questions.addRow(
+          excelCells([
+            question.prompt,
+            "scale",
+            team.teamName,
+            team.average,
+            team.count,
+          ]),
+        );
       }
     }
 
@@ -239,43 +268,49 @@ export async function buildResultsXlsx(results: SurveyResults): Promise<Buffer> 
         const pct = question.choice.count
           ? Math.round((n / question.choice.count) * 100)
           : 0;
-        questions.addRow([
-          question.prompt,
-          "choice",
-          "Overall",
-          null,
-          question.choice.count,
-          option,
-          n,
-          pct / 100,
-        ]);
+        questions.addRow(
+          excelCells([
+            question.prompt,
+            "choice",
+            "Overall",
+            null,
+            question.choice.count,
+            option,
+            n,
+            pct / 100,
+          ]),
+        );
       }
       for (const team of question.choice.byTeam) {
         for (const option of question.choice.options) {
           const n = team.counts[option] ?? 0;
           const pct = team.count ? Math.round((n / team.count) * 100) : 0;
-          questions.addRow([
-            question.prompt,
-            "choice",
-            team.teamName,
-            null,
-            team.count,
-            option,
-            n,
-            pct / 100,
-          ]);
+          questions.addRow(
+            excelCells([
+              question.prompt,
+              "choice",
+              team.teamName,
+              null,
+              team.count,
+              option,
+              n,
+              pct / 100,
+            ]),
+          );
         }
       }
     }
 
     if (question.text) {
-      questions.addRow([
-        question.prompt,
-        "text",
-        "Overall",
-        null,
-        question.text.count,
-      ]);
+      questions.addRow(
+        excelCells([
+          question.prompt,
+          "text",
+          "Overall",
+          null,
+          question.text.count,
+        ]),
+      );
     }
   }
 
@@ -289,20 +324,22 @@ export async function buildResultsXlsx(results: SurveyResults): Promise<Buffer> 
   questions.getColumn(8).width = 10;
   questions.getColumn(8).numFmt = "0%";
 
-  const comments = workbook.addWorksheet("Comments");
-  comments.addRow(["Question", "Team", "Comment"]);
-  comments.getRow(1).font = { bold: true };
-  if (results.comments.length === 0) {
-    comments.addRow(["No written comments."]);
+  const commentsSheet = workbook.addWorksheet("Comments");
+  commentsSheet.addRow(["Question", "Team", "Comment"]);
+  commentsSheet.getRow(1).font = { bold: true };
+  if (comments.length === 0) {
+    commentsSheet.addRow(["No written comments."]);
   } else {
-    for (const comment of results.comments) {
-      comments.addRow([comment.question, comment.teamName, comment.text]);
+    for (const comment of comments) {
+      commentsSheet.addRow(
+        excelCells([comment.question, comment.teamName, comment.text]),
+      );
     }
   }
-  comments.getColumn(1).width = 48;
-  comments.getColumn(2).width = 22;
-  comments.getColumn(3).width = 80;
-  comments.getColumn(3).alignment = { wrapText: true, vertical: "top" };
+  commentsSheet.getColumn(1).width = 48;
+  commentsSheet.getColumn(2).width = 22;
+  commentsSheet.getColumn(3).width = 80;
+  commentsSheet.getColumn(3).alignment = { wrapText: true, vertical: "top" };
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);

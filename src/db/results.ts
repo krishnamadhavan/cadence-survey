@@ -6,9 +6,12 @@ import {
   SUPPRESSED_TEAM_KEY,
   SUPPRESSED_TEAM_NAME,
   planTeamPublish,
-  publishedTeamName,
   teamPublishKey,
 } from "@/lib/min-cell";
+import {
+  collectPublishedComments,
+  type WrittenComment,
+} from "@/lib/comments";
 
 export { MIN_TEAM_RESPONSES, SUPPRESSED_TEAM_NAME } from "@/lib/min-cell";
 
@@ -63,12 +66,6 @@ export type TeamSummary = {
   health: TeamHealth;
 };
 
-export type WrittenComment = {
-  question: string;
-  teamName: string;
-  text: string;
-};
-
 export type SurveyResults = {
   survey: {
     id: string;
@@ -80,7 +77,6 @@ export type SurveyResults = {
   };
   teams: TeamSummary[];
   questions: QuestionResults[];
-  comments: WrittenComment[];
 };
 
 function round1(value: number): number {
@@ -484,37 +480,73 @@ export async function getSurveyResults(
     },
     teams: teamSummaries,
     questions: questionResults,
-    comments: collectComments(surveyQuestions, answersByQuestion, namedKeys),
   };
 }
 
-function collectComments(
-  surveyQuestions: { id: string; prompt: string; type: string; position: number }[],
-  answersByQuestion: Map<string, { teamId: string | null; teamName: string | null; value: { value: string | number } | null }[]>,
-  namedKeys: Set<string>,
-): WrittenComment[] {
-  const comments: WrittenComment[] = [];
+export async function getPublishedComments(
+  token: string,
+): Promise<WrittenComment[] | null> {
+  const [survey] = await db
+    .select()
+    .from(surveys)
+    .where(eq(surveys.publicToken, token))
+    .limit(1);
 
-  for (const question of surveyQuestions) {
-    if (question.type !== "text") {
-      continue;
-    }
-    for (const row of answersByQuestion.get(question.id) ?? []) {
-      const text = stringValue(row.value?.value).trim();
-      if (!text) {
-        continue;
-      }
-      comments.push({
-        question: question.prompt,
-        teamName: publishedTeamName(
-          teamPublishKey(row.teamId),
-          row.teamName ?? UNASSIGNED,
-          namedKeys,
-        ),
-        text,
-      });
-    }
+  if (!survey) {
+    return null;
   }
 
-  return comments;
+  const rows = await db
+    .select({
+      responseId: responses.id,
+      teamId: teams.id,
+      teamName: teams.name,
+      questionType: questions.type,
+      prompt: questions.prompt,
+      value: answers.value,
+    })
+    .from(responses)
+    .leftJoin(teams, eq(responses.teamId, teams.id))
+    .leftJoin(answers, eq(answers.responseId, responses.id))
+    .leftJoin(questions, eq(answers.questionId, questions.id))
+    .where(eq(responses.surveyId, survey.id));
+
+  const teamResponseIds = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const key = teamPublishKey(row.teamId);
+    const set = teamResponseIds.get(key) ?? new Set<string>();
+    set.add(row.responseId);
+    teamResponseIds.set(key, set);
+  }
+
+  const plan = planTeamPublish(
+    [...teamResponseIds.entries()].map(([key, ids]) => ({
+      key,
+      count: ids.size,
+    })),
+  );
+
+  const drafts: {
+    question: string;
+    teamKey: string;
+    teamName: string;
+    text: string;
+  }[] = [];
+  for (const row of rows) {
+    if (row.questionType !== "text") {
+      continue;
+    }
+    const text = stringValue(row.value?.value).trim();
+    if (!text) {
+      continue;
+    }
+    drafts.push({
+      question: row.prompt ?? "",
+      teamKey: teamPublishKey(row.teamId),
+      teamName: row.teamName ?? UNASSIGNED,
+      text,
+    });
+  }
+
+  return collectPublishedComments(drafts, plan);
 }
