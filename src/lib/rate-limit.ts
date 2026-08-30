@@ -9,6 +9,24 @@ export type RateLimitResult = {
   retryAfterSeconds: number;
 };
 
+export async function limitAdminLogin(ip: string): Promise<RateLimitResult> {
+  const key = `rl:admin-login:${ip}`;
+  const hits = await redis.incr(key);
+
+  if (hits === 1) {
+    await redis.expire(key, WINDOW_SECONDS);
+  }
+
+  const ttl = await redis.ttl(key);
+  const remaining = Math.max(0, MAX_HITS - hits);
+
+  return {
+    ok: hits <= MAX_HITS,
+    remaining,
+    retryAfterSeconds: ttl > 0 ? ttl : WINDOW_SECONDS,
+  };
+}
+
 export async function limitSurveySubmit(
   token: string,
   ip: string,

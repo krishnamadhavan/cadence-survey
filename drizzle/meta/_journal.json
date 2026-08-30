@@ -15,6 +15,13 @@
       "when": 1788006217174,
       "tag": "0001_lumpy_captain_midlands",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788114314762,
+      "tag": "0002_plain_maria_hill",
+      "breakpoints": true
     }
   ]
 }

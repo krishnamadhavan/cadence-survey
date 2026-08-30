@@ -2,7 +2,9 @@ import { config } from "dotenv";
 import { and, count, eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { answers, questions, responses, surveys, teams } from "./schema";
+import { hash } from "bcryptjs";
+import { normalizeEmail } from "../lib/email";
+import { admins, answers, questions, responses, surveys, teams } from "./schema";
 
 config({ path: ".env" });
 
@@ -37,6 +39,34 @@ async function ensureTeams(db: SeedDb) {
   }
 
   return bySlug;
+}
+
+async function ensureAdmin(db: SeedDb) {
+  const email = normalizeEmail(process.env.ADMIN_EMAIL ?? "");
+  const password = process.env.ADMIN_PASSWORD ?? "";
+
+  if (!email || !password) {
+    throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD are required to seed an admin");
+  }
+
+  if (password.length < 8) {
+    throw new Error("ADMIN_PASSWORD must be at least 8 characters");
+  }
+
+  const [existing] = await db
+    .select({ id: admins.id })
+    .from(admins)
+    .where(eq(admins.email, email))
+    .limit(1);
+
+  if (existing) {
+    console.log(`Admin already present (${email}).`);
+    return;
+  }
+
+  const passwordHash = await hash(password, 12);
+  await db.insert(admins).values({ email, passwordHash });
+  console.log(`Seeded admin ${email}.`);
 }
 
 async function ensureSurvey(db: SeedDb) {
@@ -207,6 +237,7 @@ async function seed() {
   const client = postgres(DATABASE_URL, { max: 1 });
   const db = drizzle(client);
 
+  await ensureAdmin(db);
   const teamsBySlug = await ensureTeams(db);
   const { survey, questions: surveyQuestions, created } = await ensureSurvey(db);
 
@@ -220,6 +251,7 @@ async function seed() {
 
   console.log(`  Public link: /s/${WEEKLY_PULSE_TOKEN}`);
   console.log("  Results:     /admin/s/weekly-pulse");
+  console.log("  Admin login: /admin/login");
 
   await client.end();
 }
