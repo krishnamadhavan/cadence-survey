@@ -33,6 +33,7 @@ export async function loginAdmin(
   jar.set(ADMIN_COOKIE, env.ADMIN_TOKEN, {
     httpOnly: true,
     sameSite: "lax",
+    secure: env.NODE_ENV === "production" || env.APP_URL.startsWith("https://"),
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });

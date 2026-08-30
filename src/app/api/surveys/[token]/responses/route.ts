@@ -5,7 +5,7 @@ import { submitSurveyResponse } from "@/lib/submit-response";
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
-  teamId: z.string().min(1),
+  teamId: z.string().uuid(),
   answers: z
     .array(
       z.object({

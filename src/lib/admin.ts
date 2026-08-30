@@ -34,6 +34,14 @@ export async function hasAdminSession(): Promise<boolean> {
   return isValidAdminToken(jar.get(ADMIN_COOKIE)?.value);
 }
 
+export async function isAdminRequest(request: Request): Promise<boolean> {
+  const bearer = readBearerToken(request.headers.get("authorization"));
+  if (isValidAdminToken(bearer)) {
+    return true;
+  }
+  return hasAdminSession();
+}
+
 export function adminUnauthorized() {
   return { error: "Unauthorized" } as const;
 }

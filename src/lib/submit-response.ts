@@ -1,9 +1,12 @@
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db/client";
 import { getSurveyByToken } from "@/db/queries";
 import { answers, responses, teams } from "@/db/schema";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
 import { limitSurveySubmit } from "@/lib/rate-limit";
+
+const teamIdSchema = z.string().uuid();
 
 export type IncomingAnswer = {
   questionId: string;
@@ -50,10 +53,15 @@ export async function submitSurveyResponse(
     return { ok: false, status: 400, error: "Pick your team." };
   }
 
+  const parsedTeamId = teamIdSchema.safeParse(teamId);
+  if (!parsedTeamId.success) {
+    return { ok: false, status: 400, error: "Pick a valid team." };
+  }
+
   const [team] = await db
     .select({ id: teams.id })
     .from(teams)
-    .where(eq(teams.id, teamId))
+    .where(eq(teams.id, parsedTeamId.data))
     .limit(1);
 
   if (!team) {
