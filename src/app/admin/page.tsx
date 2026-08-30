@@ -26,6 +26,11 @@ export default async function AdminHomePage() {
         <div>
           <p className="text-sm tracking-wide text-accent uppercase">Admin</p>
           <h1 className="mt-2 font-serif text-4xl text-ink">Survey results</h1>
+          <p className="mt-2 text-sm text-ink/50">
+            <Link href="/admin/employees" className="hover:text-ink">
+              Employees
+            </Link>
+          </p>
         </div>
         <form action={logoutAdmin}>
           <button

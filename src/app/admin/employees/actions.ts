@@ -1,0 +1,42 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { importEmployeesFromCsv } from "@/db/employees";
+import { hasAdminSession } from "@/lib/admin";
+
+export type ImportState = {
+  created: number;
+  updated: number;
+  errors: { line: number; message: string }[];
+} | null;
+
+const MAX_BYTES = 1024 * 1024;
+
+export async function importEmployees(
+  _prev: ImportState,
+  formData: FormData,
+): Promise<ImportState> {
+  if (!(await hasAdminSession())) {
+    redirect("/admin/login?next=/admin/employees");
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return {
+      created: 0,
+      updated: 0,
+      errors: [{ line: 1, message: "Choose a CSV file to upload." }],
+    };
+  }
+
+  if (file.size > MAX_BYTES) {
+    return {
+      created: 0,
+      updated: 0,
+      errors: [{ line: 1, message: "File is larger than 1 MB." }],
+    };
+  }
+
+  const text = await file.text();
+  return importEmployeesFromCsv(text);
+}

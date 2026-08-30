@@ -48,6 +48,22 @@ export const teams = pgTable("teams", {
   slug: text("slug").notNull().unique(),
 });
 
+export const employees = pgTable(
+  "employees",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("employees_team_id_idx").on(table.teamId)],
+);
+
 export const surveys = pgTable("surveys", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull(),
@@ -112,6 +128,14 @@ export const answers = pgTable(
 
 export const teamsRelations = relations(teams, ({ many }) => ({
   responses: many(responses),
+  employees: many(employees),
+}));
+
+export const employeesRelations = relations(employees, ({ one }) => ({
+  team: one(teams, {
+    fields: [employees.teamId],
+    references: [teams.id],
+  }),
 }));
 
 export const surveysRelations = relations(surveys, ({ many }) => ({
