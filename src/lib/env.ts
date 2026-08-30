@@ -4,7 +4,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().min(1, "REDIS_URL is required"),
   APP_URL: z.string().min(1).default("http://localhost:3000"),
-  ADMIN_TOKEN: z.string().min(1).optional(),
+  TRUST_PROXY: z.enum(["true", "false"]).optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).optional(),
 });
 
@@ -15,7 +15,7 @@ function readEnv(): Env {
     DATABASE_URL: process.env.DATABASE_URL,
     REDIS_URL: process.env.REDIS_URL,
     APP_URL: process.env.APP_URL,
-    ADMIN_TOKEN: process.env.ADMIN_TOKEN,
+    TRUST_PROXY: process.env.TRUST_PROXY,
     NODE_ENV: process.env.NODE_ENV,
   });
 

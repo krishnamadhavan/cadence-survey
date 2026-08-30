@@ -20,11 +20,8 @@ export default async function AdminLoginPage({ searchParams }: LoginPageProps) {
       <p className="text-sm tracking-wide text-accent uppercase">Cadence</p>
       <h1 className="mt-3 font-serif text-4xl text-ink">Admin</h1>
       <p className="mt-3 text-ink/70">
-        Results stay off the public link. Sign in with the token from{" "}
-        <code className="rounded bg-ink/5 px-1.5 py-0.5 font-mono text-sm">
-          ADMIN_TOKEN
-        </code>
-        .
+        Results stay off the public link. Sign in with the seeded admin email
+        and password.
       </p>
       <div className="mt-8">
         <LoginForm nextPath={next && next.startsWith("/admin") ? next : "/admin"} />

@@ -22,7 +22,7 @@ make dev               # http://localhost:3000
 
 Seeded public survey: [http://localhost:3000/s/weekly-pulse](http://localhost:3000/s/weekly-pulse)
 
-Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) (token from `ADMIN_TOKEN` in `.env`)
+Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) — sign in with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`admin@cadence.local` / `cadence-admin` by default). If you already have a `.env` from before this change, copy those two keys from `.env.example` and run `pnpm db:seed` again. Re-seeding updates that admin’s password to match `.env`.
 
 Health (Postgres + Redis): [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
@@ -34,20 +34,22 @@ curl -sS -X POST http://localhost:3000/api/surveys/weekly-pulse/responses \
   -d '{"teamId":"<team-uuid>","answers":[{"questionId":"<uuid>","value":4}]}'
 ```
 
-Admin results API (cookie from `/admin/login`, or a bearer token):
+Admin results API (session cookie from `/admin/login` or `POST /api/admin/login`):
 
 ```bash
-curl -sS http://localhost:3000/api/admin/surveys/weekly-pulse/results \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -sS -c /tmp/cadence.jar -X POST http://localhost:3000/api/admin/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@cadence.local","password":"cadence-admin"}'
+curl -sS -b /tmp/cadence.jar http://localhost:3000/api/admin/surveys/weekly-pulse/results
 ```
 
 Download the same published numbers (CSV or Excel) from the results page. Written comments are only in the file (not the JSON results API), and only from teams that meet the 3-response floor. Or:
 
 ```bash
-curl -sS -O -J "http://localhost:3000/api/admin/surveys/weekly-pulse/export?format=csv" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
-curl -sS -O -J "http://localhost:3000/api/admin/surveys/weekly-pulse/export?format=xlsx" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -sS -b /tmp/cadence.jar -O -J \
+  "http://localhost:3000/api/admin/surveys/weekly-pulse/export?format=csv"
+curl -sS -b /tmp/cadence.jar -O -J \
+  "http://localhost:3000/api/admin/surveys/weekly-pulse/export?format=xlsx"
 ```
 
 ## Everyday commands
@@ -70,12 +72,12 @@ Default host ports are **5435** (Postgres) and **6380** (Redis) so this stack do
 ```
 docker-compose.yml     Postgres + Redis only
 src/app/s/[token]                      Public survey + submit + thanks
-src/app/admin                          Results (token-gated)
+src/app/admin                          Results (email/password session)
 src/app/api/health                     Postgres + Redis ping
 src/app/api/surveys/[token]/responses  JSON submit (same path as the form)
 src/app/api/admin/surveys/...          Results JSON and CSV/Excel export
-src/db/schema.ts       surveys, questions, responses, answers, teams
-src/db/seed.ts         weekly-pulse + teams + demo responses
+src/db/schema.ts       surveys, questions, responses, answers, teams, admins
+src/db/seed.ts         weekly-pulse + teams + demo responses + admin user
 src/lib/redis.ts       ioredis singleton
 src/lib/rate-limit.ts  submit throttle
 ```
@@ -84,6 +86,7 @@ Next.js stays on the host so hot reload stays fast on macOS. Compose is the data
 
 ## Data model
 
+- `admins` — seeded email + password hash; sessions live in Redis
 - `surveys` — title, status (`draft` / `open` / `closed`), unique `public_token`
 - `teams` — Engineering, Product, Design, Operations (seeded)
 - `questions` — `scale`, `choice`, or `text`

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSurveyResults } from "@/db/results";
-import { isAdminRequest } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -8,8 +8,9 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ token: string }> },
 ) {
-  if (!(await isAdminRequest(request))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await requireAdminApi(request);
+  if (denied) {
+    return denied;
   }
 
   const { token } = await context.params;
