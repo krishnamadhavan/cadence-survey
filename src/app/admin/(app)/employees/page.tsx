@@ -1,18 +1,10 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
 import { listEmployees } from "@/db/employees";
 import { listTeams } from "@/db/queries";
-import { hasAdminSession } from "@/lib/admin";
-import { logoutAdmin } from "../login/actions";
 import { UploadForm } from "./upload-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmployeesPage() {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/employees");
-  }
-
   let people: Awaited<ReturnType<typeof listEmployees>> = [];
   let teams: Awaited<ReturnType<typeof listTeams>> = [];
   let dbError = false;
@@ -25,28 +17,13 @@ export default async function EmployeesPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-16">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm tracking-wide text-accent uppercase">Admin</p>
-          <h1 className="mt-2 font-serif text-4xl text-ink">Employees</h1>
-          <p className="mt-2 text-sm text-ink/50">
-            <Link href="/admin" className="hover:text-ink">
-              Surveys
-            </Link>
-          </p>
-        </div>
-        <form action={logoutAdmin}>
-          <button
-            type="submit"
-            className="text-sm text-ink/50 underline-offset-4 hover:text-ink hover:underline"
-          >
-            Log out
-          </button>
-        </form>
-      </header>
+    <div className="mx-auto w-full max-w-4xl">
+      <h1 className="font-serif text-4xl text-ink">Employees</h1>
+      <p className="mt-2 text-ink/60">
+        Load the roster from a CSV. Existing emails are updated.
+      </p>
 
-      <section className="mt-10 rounded-2xl border border-ink/10 bg-white/70 px-5 py-5">
+      <section className="mt-8 rounded-2xl border border-ink/10 bg-white/70 px-5 py-5">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
           Bulk upload
         </h2>
@@ -58,7 +35,7 @@ export default async function EmployeesPage() {
           {teams.length > 0
             ? teams.map((team) => team.name).join(", ")
             : "seed teams first"}
-          . Existing emails are updated.
+          .
         </p>
         {dbError ? (
           <p className="mt-4 text-sm text-ink/70">
@@ -113,6 +90,6 @@ export default async function EmployeesPage() {
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }
