@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { importEmployeesFromCsv } from "@/db/employees";
 import { hasAdminSession } from "@/lib/admin";
@@ -38,7 +39,9 @@ export async function importEmployees(
   }
 
   try {
-    return await importEmployeesFromCsv(await file.text());
+    const result = await importEmployeesFromCsv(await file.text());
+    revalidatePath("/admin/employees");
+    return result;
   } catch {
     return {
       created: 0,

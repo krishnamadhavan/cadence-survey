@@ -14,7 +14,7 @@ export default async function AdminHomePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div className="w-full">
       <h1 className="font-serif text-4xl text-ink">Surveys</h1>
       <p className="mt-2 text-ink/60">
         Open a pulse to see results, or share the public link.
