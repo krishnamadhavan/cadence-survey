@@ -13,6 +13,21 @@ test("parseCsvRecords handles quotes, commas, and CRLF", () => {
   assert.deepEqual(records[1], ["Lovelace, Ada", "ada@x.test", "Engineering"]);
 });
 
+test("parseEmployeeCsv keeps a UTF-8 BOM and reordered columns", () => {
+  const parsed = parseEmployeeCsv(
+    "\uFEFFteam,email,name\nEngineering,ada@x.test,Ada Lovelace\n",
+  );
+  assert.equal(parsed.errors.length, 0);
+  assert.deepEqual(parsed.rows, [
+    {
+      line: 2,
+      name: "Ada Lovelace",
+      email: "ada@x.test",
+      team: "Engineering",
+    },
+  ]);
+});
+
 test("parseEmployeeCsv maps headers and rejects bad rows", () => {
   const parsed = parseEmployeeCsv(
     [

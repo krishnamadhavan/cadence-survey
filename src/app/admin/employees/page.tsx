@@ -60,15 +60,24 @@ export default async function EmployeesPage() {
             : "seed teams first"}
           . Existing emails are updated.
         </p>
-        <a
-          href="/api/admin/employees/template"
-          className="mt-3 inline-flex text-sm font-medium text-accent underline-offset-4 hover:underline"
-        >
-          Download template
-        </a>
-        <div className="mt-5">
-          <UploadForm />
-        </div>
+        {dbError ? (
+          <p className="mt-4 text-sm text-ink/70">
+            Could not reach Postgres. The upload form is disabled until the
+            database is up.
+          </p>
+        ) : (
+          <>
+            <a
+              href="/api/admin/employees/template"
+              className="mt-3 inline-flex text-sm font-medium text-accent underline-offset-4 hover:underline"
+            >
+              Download template
+            </a>
+            <div className="mt-5">
+              <UploadForm />
+            </div>
+          </>
+        )}
       </section>
 
       <section className="mt-12">

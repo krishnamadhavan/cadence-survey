@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { employees, teams } from "@/db/schema";
 import {
@@ -20,6 +20,8 @@ export type EmployeeImportResult = {
   updated: number;
   errors: EmployeeCsvError[];
 };
+
+const INSERT_CHUNK = 500;
 
 export async function listEmployees(): Promise<EmployeeListItem[]> {
   return db
@@ -49,12 +51,7 @@ export async function importEmployeesFromCsv(
     .select({ id: teams.id, name: teams.name, slug: teams.slug })
     .from(teams);
 
-  const ready: {
-    line: number;
-    name: string;
-    email: string;
-    teamId: string;
-  }[] = [];
+  const ready: { name: string; email: string; teamId: string }[] = [];
 
   for (const row of parsed.rows) {
     const teamId = matchTeamId(row.team, teamRows);
@@ -66,7 +63,6 @@ export async function importEmployeesFromCsv(
       continue;
     }
     ready.push({
-      line: row.line,
       name: row.name,
       email: row.email,
       teamId,
@@ -77,36 +73,35 @@ export async function importEmployeesFromCsv(
     return { created: 0, updated: 0, errors };
   }
 
-  const emails = ready.map((row) => row.email);
-  const existing = await db
-    .select({ email: employees.email })
-    .from(employees)
-    .where(inArray(employees.email, emails));
-  const existingEmails = new Set(existing.map((row) => row.email));
+  let created = 0;
+  let updated = 0;
 
-  const toCreate = ready.filter((row) => !existingEmails.has(row.email));
-  const toUpdate = ready.filter((row) => existingEmails.has(row.email));
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < ready.length; i += INSERT_CHUNK) {
+      const chunk = ready.slice(i, i + INSERT_CHUNK);
+      const written = await tx
+        .insert(employees)
+        .values(chunk)
+        .onConflictDoUpdate({
+          target: employees.email,
+          set: {
+            name: sql`excluded.name`,
+            teamId: sql`excluded.team_id`,
+          },
+        })
+        .returning({
+          inserted: sql<boolean>`xmax = 0`,
+        });
 
-  if (toCreate.length > 0) {
-    await db.insert(employees).values(
-      toCreate.map((row) => ({
-        name: row.name,
-        email: row.email,
-        teamId: row.teamId,
-      })),
-    );
-  }
+      for (const row of written) {
+        if (row.inserted) {
+          created += 1;
+        } else {
+          updated += 1;
+        }
+      }
+    }
+  });
 
-  for (const row of toUpdate) {
-    await db
-      .update(employees)
-      .set({ name: row.name, teamId: row.teamId })
-      .where(eq(employees.email, row.email));
-  }
-
-  return {
-    created: toCreate.length,
-    updated: toUpdate.length,
-    errors,
-  };
+  return { created, updated, errors };
 }

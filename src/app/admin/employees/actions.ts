@@ -37,6 +37,18 @@ export async function importEmployees(
     };
   }
 
-  const text = await file.text();
-  return importEmployeesFromCsv(text);
+  try {
+    return await importEmployeesFromCsv(await file.text());
+  } catch {
+    return {
+      created: 0,
+      updated: 0,
+      errors: [
+        {
+          line: 1,
+          message: "Could not import employees. Is Postgres running?",
+        },
+      ],
+    };
+  }
 }
