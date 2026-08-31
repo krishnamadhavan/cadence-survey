@@ -74,7 +74,7 @@ Default host ports are **5435** (Postgres) and **6380** (Redis) so this stack do
 ```
 docker-compose.yml     Postgres + Redis only
 src/app/s/[token]                      Public survey + submit + thanks
-src/app/admin                          Results and employee roster (email/password session)
+src/app/admin                          Admin shell (surveys, employees, results)
 src/app/api/health                     Postgres + Redis ping
 src/app/api/surveys/[token]/responses  JSON submit (same path as the form)
 src/app/api/admin/surveys/...          Results JSON and CSV/Excel export

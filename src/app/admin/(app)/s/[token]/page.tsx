@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
 import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
-import { hasAdminSession } from "@/lib/admin";
-import { logoutAdmin } from "../../login/actions";
 import { ExportButtons } from "./export-buttons";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +17,6 @@ export async function generateMetadata({ params }: ResultsPageProps) {
 }
 
 export default async function SurveyResultsPage({ params }: ResultsPageProps) {
-  if (!(await hasAdminSession())) {
-    const { token } = await params;
-    redirect(`/admin/login?next=/admin/s/${token}`);
-  }
-
   const { token } = await params;
   let results;
 
@@ -31,9 +24,9 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
     results = await getSurveyResults(token);
   } catch {
     return (
-      <main className="mx-auto w-full max-w-4xl px-6 py-16">
+      <div className="mx-auto w-full max-w-4xl">
         <p className="text-ink/70">Could not reach Postgres.</p>
-      </main>
+      </div>
     );
   }
 
@@ -49,32 +42,20 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-6 py-16">
+    <div className="mx-auto flex w-full max-w-4xl flex-col">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm tracking-wide text-accent uppercase">Results</p>
-          <h1 className="mt-2 font-serif text-4xl text-ink">
-            {results.survey.title}
-          </h1>
+          <h1 className="font-serif text-4xl text-ink">{results.survey.title}</h1>
           <p className="mt-2 text-sm text-ink/50">
-            <Link href="/admin" className="hover:text-ink">
-              All surveys
-            </Link>
-            <span className="px-2">·</span>
-            <Link href={`/s/${results.survey.publicToken}`} className="hover:text-ink">
+            <Link
+              href={`/s/${results.survey.publicToken}`}
+              className="hover:text-ink"
+            >
               Public link
             </Link>
           </p>
         </div>
         <div className="flex flex-col items-end gap-3">
-          <form action={logoutAdmin}>
-            <button
-              type="submit"
-              className="text-sm text-ink/50 underline-offset-4 hover:text-ink hover:underline"
-            >
-              Log out
-            </button>
-          </form>
           <ExportButtons token={results.survey.publicToken} />
           <p className="max-w-xs text-right text-xs text-ink/45">
             CSV and Excel include written comments from teams that meet the
@@ -156,7 +137,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           <QuestionCard key={question.id} question={question} />
         ))}
       </section>
-    </main>
+    </div>
   );
 }
 
