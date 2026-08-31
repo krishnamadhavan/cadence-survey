@@ -10,17 +10,31 @@ const NAV = [
   { href: "/admin/employees", label: "Employees", match: "employees" },
 ] as const;
 
+const COLLAPSE_COOKIE = "cadence_sidebar";
+
 type AdminShellProps = {
   email: string;
+  sidebarCollapsed?: boolean;
   children: React.ReactNode;
 };
 
-export function AdminShell({ email, children }: AdminShellProps) {
+export function AdminShell({
+  email,
+  sidebarCollapsed = false,
+  children,
+}: AdminShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(sidebarCollapsed);
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    document.cookie = `${COLLAPSE_COOKIE}=${next ? "1" : "0"}; path=/; max-age=31536000; samesite=lax`;
+  }
 
   return (
-    <div className="flex min-h-full bg-paper">
+    <div className="flex min-h-dvh bg-paper">
       {open ? (
         <button
           type="button"
@@ -31,42 +45,71 @@ export function AdminShell({ email, children }: AdminShellProps) {
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-ink/10 bg-paper transition-transform md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col border-r border-ink/10 bg-paper transition-[width,transform] duration-200 md:sticky md:top-0 md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
-        }`}
+        } ${collapsed ? "w-60 md:w-16" : "w-60"}`}
       >
-        <div className="flex h-14 items-center px-5">
+        <div
+          className={`flex h-14 shrink-0 items-center border-b border-ink/10 ${
+            collapsed ? "justify-center px-2" : "px-5"
+          }`}
+        >
           <Link
             href="/admin"
             onClick={() => setOpen(false)}
             className="font-serif text-xl text-ink"
+            title="Cadence"
           >
-            Cadence
+            {collapsed ? "C" : "Cadence"}
           </Link>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 px-3 py-3">
+
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-3">
           {NAV.map((item) => {
             const active = isActive(pathname, item.match);
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                title={item.label}
                 onClick={() => setOpen(false)}
-                className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                className={`rounded-xl py-2 text-sm font-medium transition-colors ${
+                  collapsed ? "px-0 text-center" : "px-3"
+                } ${
                   active
                     ? "bg-accent/10 text-ink"
                     : "text-ink/60 hover:bg-ink/5 hover:text-ink"
                 }`}
               >
-                {item.label}
+                {collapsed ? item.label.slice(0, 1) : item.label}
               </Link>
             );
           })}
         </nav>
-        <p className="px-5 pb-5 text-xs text-ink/40">Pulse surveys</p>
+
+        <div className="mt-auto shrink-0 border-t border-ink/10 p-2">
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className={`hidden w-full items-center rounded-xl py-2 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink md:flex ${
+              collapsed ? "justify-center px-0" : "justify-between px-3"
+            }`}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? (
+              <ExpandIcon />
+            ) : (
+              <>
+                <span>Collapse</span>
+                <CollapseIcon />
+              </>
+            )}
+          </button>
+        </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-ink/10 bg-paper/90 px-4 backdrop-blur md:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -126,6 +169,34 @@ function MenuIcon() {
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CollapseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="M10 4 6 8l4 4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ExpandIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="m6 4 4 4-4 4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );

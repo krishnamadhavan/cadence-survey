@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { getAdminSessionUser } from "@/lib/admin";
@@ -15,5 +15,12 @@ export default async function AdminAppLayout({
     redirect(`/admin/login?next=${encodeURIComponent(next)}`);
   }
 
-  return <AdminShell email={admin.email}>{children}</AdminShell>;
+  const sidebarCollapsed =
+    (await cookies()).get("cadence_sidebar")?.value === "1";
+
+  return (
+    <AdminShell email={admin.email} sidebarCollapsed={sidebarCollapsed}>
+      {children}
+    </AdminShell>
+  );
 }
