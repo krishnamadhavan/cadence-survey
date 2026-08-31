@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { logoutAdmin } from "@/app/admin/login/actions";
 
 const NAV = [
-  { href: "/admin", label: "Surveys", match: "surveys" },
-  { href: "/admin/employees", label: "Employees", match: "employees" },
+  { href: "/admin", label: "Surveys", match: "surveys", icon: SurveysIcon },
+  {
+    href: "/admin/employees",
+    label: "Employees",
+    match: "employees",
+    icon: EmployeesIcon,
+  },
 ] as const;
 
 const COLLAPSE_COOKIE = "cadence_sidebar";
@@ -67,21 +72,27 @@ export function AdminShell({
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-3">
           {NAV.map((item) => {
             const active = isActive(pathname, item.match);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 title={item.label}
                 onClick={() => setOpen(false)}
-                className={`rounded-xl py-2 text-sm font-medium transition-colors ${
-                  collapsed ? "px-0 text-center" : "px-3"
+                className={`flex items-center rounded-xl py-2 text-sm font-medium transition-colors ${
+                  collapsed ? "justify-center px-0" : "gap-3 px-3"
                 } ${
                   active
                     ? "bg-accent/10 text-ink"
                     : "text-ink/60 hover:bg-ink/5 hover:text-ink"
                 }`}
               >
-                {collapsed ? item.label.slice(0, 1) : item.label}
+                <Icon />
+                {collapsed ? (
+                  <span className="sr-only">{item.label}</span>
+                ) : (
+                  item.label
+                )}
               </Link>
             );
           })}
@@ -124,22 +135,86 @@ export function AdminShell({
               {pageTitle(pathname)}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden truncate text-sm text-ink/50 sm:inline">
-              {email}
-            </span>
-            <form action={logoutAdmin}>
-              <button
-                type="submit"
-                className="rounded-full border border-ink/15 px-3 py-1.5 text-sm text-ink/70 transition-colors hover:border-ink/40 hover:text-ink"
-              >
-                Log out
-              </button>
-            </form>
-          </div>
+          <ProfileMenu email={email} />
         </header>
         <div className="flex-1 px-4 py-8 md:px-8">{children}</div>
       </div>
+    </div>
+  );
+}
+
+function ProfileMenu({ email }: { email: string }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const initial = (email.trim()[0] ?? "A").toUpperCase();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onPointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-ink/15 bg-white/70 text-sm font-medium text-ink transition-colors hover:border-ink/40"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="sr-only">Open profile menu</span>
+        {initial}
+      </button>
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-ink/10 bg-paper shadow-lg"
+        >
+          <div className="border-b border-ink/10 px-4 py-3">
+            <p className="text-xs tracking-wide text-ink/45 uppercase">
+              Signed in
+            </p>
+            <p className="mt-1 truncate text-sm font-medium text-ink">{email}</p>
+          </div>
+          <Link
+            href="/admin/profile"
+            role="menuitem"
+            className="block px-4 py-2.5 text-sm text-ink/80 hover:bg-ink/5"
+            onClick={() => setOpen(false)}
+          >
+            Profile
+          </Link>
+          <form action={logoutAdmin}>
+            <button
+              type="submit"
+              role="menuitem"
+              className="block w-full px-4 py-2.5 text-left text-sm text-ink/80 hover:bg-ink/5"
+            >
+              Log out
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -155,10 +230,56 @@ function pageTitle(pathname: string) {
   if (pathname.startsWith("/admin/employees")) {
     return "Employees";
   }
+  if (pathname.startsWith("/admin/profile")) {
+    return "Profile";
+  }
   if (pathname.startsWith("/admin/s/")) {
     return "Results";
   }
   return "Surveys";
+}
+
+function SurveysIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <rect
+        x="2.5"
+        y="2.5"
+        width="11"
+        height="11"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M5 6.5h6M5 9.5h4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function EmployeesIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="6" cy="5.5" r="2" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M2.5 12.5c.4-2 1.9-3 3.5-3s3.1 1 3.5 3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="11.5" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M11 9.5c1.4.2 2.6 1.1 3 2.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 function MenuIcon() {
