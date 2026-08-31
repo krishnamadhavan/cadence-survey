@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { admins } from "@/db/schema";
+import { resolveSessionUser } from "@/lib/admin-user";
 import { readBearerToken } from "@/lib/bearer";
 import {
   SESSION_COOKIE,
@@ -22,12 +23,14 @@ export async function getAdminSessionUser(): Promise<{
     if (!session) {
       return null;
     }
-    const [admin] = await db
-      .select({ id: admins.id, email: admins.email })
-      .from(admins)
-      .where(eq(admins.id, session.adminId))
-      .limit(1);
-    return admin ?? { id: session.adminId, email: "Admin" };
+    return resolveSessionUser(session.adminId, async () => {
+      const [admin] = await db
+        .select({ id: admins.id, email: admins.email })
+        .from(admins)
+        .where(eq(admins.id, session.adminId))
+        .limit(1);
+      return admin;
+    });
   } catch (error) {
     if (error instanceof SessionStoreUnavailable) {
       return null;

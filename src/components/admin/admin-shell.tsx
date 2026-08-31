@@ -74,7 +74,10 @@ export function AdminShell({
             open ? "translate-x-0" : "-translate-x-full"
           } ${sidebarWidthClass(collapsed)}`}
         >
-          <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-2">
+          <nav
+            aria-label="Admin"
+            className="flex flex-1 flex-col overflow-y-auto px-2 py-2"
+          >
             {NAV_SECTIONS.map((section, index) => (
               <div
                 key={section.id}
@@ -152,7 +155,7 @@ export function AdminShell({
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1 px-4 py-8 md:px-8">{children}</div>
+        <main className="min-w-0 flex-1 px-4 py-8 md:px-8">{children}</main>
       </div>
     </div>
   );

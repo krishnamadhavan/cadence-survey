@@ -65,6 +65,7 @@ export function AdminTopbar({
   const pathname = usePathname();
   const crumbs = breadcrumbs(pathname);
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -153,6 +154,7 @@ export function AdminTopbar({
         </nav>
 
       <button
+        ref={searchButtonRef}
         type="button"
         onClick={() => setSearchOpen(true)}
         className="inline-flex h-9 items-center gap-2 rounded-lg border border-ink/10 bg-white/60 px-2.5 text-sm text-ink/50 transition-colors hover:border-ink/25 hover:text-ink"
@@ -185,7 +187,12 @@ export function AdminTopbar({
         <ProfileMenu email={email} />
       </div>
 
-      {searchOpen ? <SearchPalette onClose={() => setSearchOpen(false)} /> : null}
+      {searchOpen ? (
+        <SearchPalette
+          onClose={() => setSearchOpen(false)}
+          returnFocusRef={searchButtonRef}
+        />
+      ) : null}
     </header>
   );
 }
@@ -204,6 +211,7 @@ function QuickCreateMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
+        aria-label="New"
         onClick={() => setOpen((current) => !current)}
       >
         <PlusIcon />
@@ -291,6 +299,7 @@ function HelpMenu() {
   const [open, setOpen] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   useDismiss(open, () => setOpen(false), rootRef);
 
@@ -298,6 +307,7 @@ function HelpMenu() {
     <>
       <div ref={rootRef} className="relative">
         <button
+          ref={helpButtonRef}
           type="button"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink/10 text-ink transition-colors hover:bg-ink/5"
           aria-haspopup="menu"
@@ -344,7 +354,12 @@ function HelpMenu() {
           </div>
         ) : null}
       </div>
-      {shortcuts ? <ShortcutsDialog onClose={() => setShortcuts(false)} /> : null}
+      {shortcuts ? (
+        <ShortcutsDialog
+          onClose={() => setShortcuts(false)}
+          returnFocusRef={helpButtonRef}
+        />
+      ) : null}
     </>
   );
 }
@@ -404,8 +419,15 @@ function ProfileMenu({ email }: { email: string }) {
   );
 }
 
-function SearchPalette({ onClose }: { onClose: () => void }) {
+function SearchPalette({
+  onClose,
+  returnFocusRef,
+}: {
+  onClose: () => void;
+  returnFocusRef: React.RefObject<HTMLButtonElement | null>;
+}) {
   const router = useRouter();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -434,14 +456,24 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
   }, [query]);
 
   useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const returnTo = returnFocusRef.current;
     inputRef.current?.focus();
-  }, []);
+    return () => {
+      (returnTo ?? previous)?.focus();
+    };
+  }, [returnFocusRef]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
+        return;
+      }
+      if (event.key === "Tab") {
+        trapTab(event, dialogRef.current);
+        return;
       }
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -466,10 +498,12 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
       <button
         type="button"
         aria-label="Close search"
+        tabIndex={-1}
         className="absolute inset-0"
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-label="Search"
         aria-modal="true"
@@ -517,11 +551,34 @@ function SearchPalette({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ShortcutsDialog({ onClose }: { onClose: () => void }) {
+function ShortcutsDialog({
+  onClose,
+  returnFocusRef,
+}: {
+  onClose: () => void;
+  returnFocusRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const returnTo = returnFocusRef.current;
+    closeRef.current?.focus();
+    return () => {
+      (returnTo ?? previous)?.focus();
+    };
+  }, [returnFocusRef]);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        event.preventDefault();
         onClose();
+        return;
+      }
+      if (event.key === "Tab") {
+        trapTab(event, dialogRef.current);
       }
     }
     document.addEventListener("keydown", onKeyDown);
@@ -533,10 +590,12 @@ function ShortcutsDialog({ onClose }: { onClose: () => void }) {
       <button
         type="button"
         aria-label="Close shortcuts"
+        tabIndex={-1}
         className="absolute inset-0"
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-label="Keyboard shortcuts"
         aria-modal="true"
@@ -557,9 +616,45 @@ function ShortcutsDialog({ onClose }: { onClose: () => void }) {
             </kbd>
           </li>
         </ul>
+        <button
+          ref={closeRef}
+          type="button"
+          className="mt-5 rounded-lg border border-ink/10 px-3 py-1.5 text-sm text-ink/80 hover:bg-ink/5"
+          onClick={onClose}
+        >
+          Close
+        </button>
       </div>
     </div>
   );
+}
+
+function focusableElements(root: HTMLElement) {
+  return [
+    ...root.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    ),
+  ].filter((element) => element.tabIndex !== -1);
+}
+
+function trapTab(event: KeyboardEvent, root: HTMLElement | null) {
+  if (!root) {
+    return;
+  }
+  const list = focusableElements(root);
+  if (list.length === 0) {
+    event.preventDefault();
+    return;
+  }
+  const first = list[0];
+  const last = list[list.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function useDismiss(
