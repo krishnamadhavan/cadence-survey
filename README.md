@@ -24,6 +24,8 @@ Seeded public survey: [http://localhost:3000/s/weekly-pulse](http://localhost:30
 
 Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) — sign in with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`admin@cadence.local` / `cadence-admin` by default). If you already have a `.env` from before this change, copy those two keys from `.env.example` and run `pnpm db:seed` again. Re-seeding updates that admin’s password to match `.env`.
 
+Employee roster: [http://localhost:3000/admin/employees](http://localhost:3000/admin/employees) — upload a CSV with `name,email,team`. Team must match a seeded team name or slug. Existing emails are updated.
+
 Health (Postgres + Redis): [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
 Public submit also accepts JSON. `teamId` is required so results can break down by team:
@@ -72,7 +74,7 @@ Default host ports are **5435** (Postgres) and **6380** (Redis) so this stack do
 ```
 docker-compose.yml     Postgres + Redis only
 src/app/s/[token]                      Public survey + submit + thanks
-src/app/admin                          Results (email/password session)
+src/app/admin                          Results and employee roster (email/password session)
 src/app/api/health                     Postgres + Redis ping
 src/app/api/surveys/[token]/responses  JSON submit (same path as the form)
 src/app/api/admin/surveys/...          Results JSON and CSV/Excel export
@@ -89,6 +91,7 @@ Next.js stays on the host so hot reload stays fast on macOS. Compose is the data
 - `admins` — seeded email + password hash; sessions live in Redis
 - `surveys` — title, status (`draft` / `open` / `closed`), unique `public_token`
 - `teams` — Engineering, Product, Design, Operations (seeded)
+- `employees` — name, email, team; bulk-loaded from CSV on `/admin/employees`
 - `questions` — `scale`, `choice`, or `text`
 - `responses` — one row per submit, with `team_id`
 - `answers` — jsonb `{ "value": ... }` per question
