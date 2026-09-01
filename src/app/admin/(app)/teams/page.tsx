@@ -1,10 +1,21 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import { listTeamsForAdmin } from "@/db/teams";
+import { TeamsPanel } from "./teams-panel";
 
-export default function AdminTeamsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminTeamsPage() {
+  let teams: Awaited<ReturnType<typeof listTeamsForAdmin>> = [];
+  let dbError = false;
+
+  try {
+    teams = await listTeamsForAdmin();
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Teams"
-      description="Create and rename teams used on the employee roster. Coming soon."
-    />
+    <div className="w-full">
+      <TeamsPanel teams={teams} dbError={dbError} />
+    </div>
   );
 }
