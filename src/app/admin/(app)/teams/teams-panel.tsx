@@ -93,8 +93,11 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
       return;
     }
     const next = Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, parsed));
-    setPageSize(next);
     setPageSizeDraft(String(next));
+    if (next === pageSize) {
+      return;
+    }
+    setPageSize(next);
     setPage(1);
   }
 
