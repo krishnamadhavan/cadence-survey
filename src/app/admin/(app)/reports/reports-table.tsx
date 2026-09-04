@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReportListItem } from "@/db/reports";
 import type { SurveyStatus } from "@/db/schema";
@@ -254,7 +255,13 @@ export function ReportsTable({ surveys, dbError }: ReportsTableProps) {
                     }}
                   >
                     <td className="px-4 py-3 font-medium text-ink">
-                      {survey.title}
+                      <Link
+                        href={`/admin/reports/${survey.publicToken}`}
+                        className="hover:underline"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {survey.title}
+                      </Link>
                     </td>
                     <td className="px-4 py-3">
                       <StatusPill status={survey.status} />
@@ -400,7 +407,7 @@ function formatDate(iso: string) {
   if (Number.isNaN(date.getTime())) {
     return "—";
   }
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",

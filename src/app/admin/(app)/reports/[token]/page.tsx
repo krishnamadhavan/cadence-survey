@@ -41,7 +41,7 @@ export default async function ReportDetailPage({
     notFound();
   }
 
-  const { selected, previous, results, previousResults, surveys, employeeCount } =
+  const { selected, previous, results, previousResults, employeeCount } =
     detail;
   const participation =
     employeeCount > 0
@@ -74,7 +74,8 @@ export default async function ReportDetailPage({
     (sum, question) => sum + (question.text?.count ?? 0),
     0,
   );
-  const hasCycles = surveys.length >= 2;
+  const cycles = detail.cycles;
+  const hasCycles = cycles.length >= 2;
 
   return (
     <div className="w-full">
@@ -211,8 +212,16 @@ export default async function ReportDetailPage({
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
           Compare vs last cycle
         </h2>
-        {!hasCycles || !previous || !previousResults ? (
+        {selected.status === "draft" ? (
+          <p className="mt-3 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
+            Drafts are not cycles. Open or close a pulse to compare it.
+          </p>
+        ) : !hasCycles ? (
           <NeedsCycles />
+        ) : !previous || !previousResults ? (
+          <p className="mt-3 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
+            No earlier cycle to compare. This is the first published pulse.
+          </p>
         ) : (
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <CompareCard
@@ -260,8 +269,7 @@ export default async function ReportDetailPage({
           <NeedsCycles />
         ) : (
           <TrendList
-            label="Average score"
-            items={surveys.map((survey) => ({
+            items={cycles.map((survey) => ({
               id: survey.id,
               title: survey.title,
               value: survey.averageScore,
@@ -279,8 +287,7 @@ export default async function ReportDetailPage({
           <NeedsCycles />
         ) : (
           <TrendList
-            label="Participation"
-            items={surveys.map((survey) => ({
+            items={cycles.map((survey) => ({
               id: survey.id,
               title: survey.title,
               value: survey.participation,
@@ -459,7 +466,6 @@ function CompareCard({
 function TrendList({
   items,
 }: {
-  label: string;
   items: { id: string; title: string; value: number | null; display: string }[];
 }) {
   const numeric = items
