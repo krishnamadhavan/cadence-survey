@@ -88,6 +88,16 @@ export function breadcrumbs(pathname: string): Crumb[] {
   if (pathname.startsWith("/admin/profile")) {
     return [{ label: "Admin" }, { label: "Profile" }];
   }
+  if (
+    pathname.startsWith("/admin/reports/") &&
+    pathname !== "/admin/reports"
+  ) {
+    return [
+      { label: "Insights", href: "/admin/reports" },
+      { label: "Reports", href: "/admin/reports" },
+      { label: "Detail" },
+    ];
+  }
   const current = NAV_ITEMS.find((item) => isActivePath(pathname, item.href));
   if (!current) {
     return [{ label: "Listen", href: "/admin" }, { label: "Surveys" }];
