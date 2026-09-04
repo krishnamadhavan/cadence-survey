@@ -85,8 +85,11 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
       return;
     }
     const next = Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, parsed));
-    setPageSize(next);
     setPageSizeDraft(String(next));
+    if (next === pageSize) {
+      return;
+    }
+    setPageSize(next);
     setPage(1);
   }
 
@@ -311,6 +314,8 @@ function ImportModal({
   }, [returnFocusRef]);
 
   useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -322,7 +327,10 @@ function ImportModal({
       }
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [onClose]);
 
   return (

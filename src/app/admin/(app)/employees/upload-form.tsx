@@ -27,7 +27,14 @@ export function UploadForm({ onCancel }: UploadFormProps) {
   }
 
   return (
-    <form action={action} className="flex min-h-0 flex-1 flex-col">
+    <form
+      action={action}
+      className="flex min-h-0 flex-1 flex-col"
+      onReset={() => {
+        setFileName(null);
+        setDragging(false);
+      }}
+    >
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 py-5">
         <label
           className={`flex min-h-64 flex-1 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 text-center transition-colors ${
