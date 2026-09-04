@@ -24,7 +24,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
     results = await getSurveyResults(token);
   } catch {
     return (
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="w-full">
         <p className="text-ink/70">Could not reach Postgres.</p>
       </div>
     );
@@ -42,7 +42,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col">
+    <div className="flex w-full flex-col">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-4xl text-ink">{results.survey.title}</h1>

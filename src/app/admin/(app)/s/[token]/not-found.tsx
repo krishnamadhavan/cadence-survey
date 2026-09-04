@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function AdminSurveyNotFound() {
   return (
-    <div className="mx-auto w-full max-w-xl">
+    <div className="w-full">
       <h1 className="font-serif text-4xl text-ink">Survey not found</h1>
       <Link
         href="/admin"
