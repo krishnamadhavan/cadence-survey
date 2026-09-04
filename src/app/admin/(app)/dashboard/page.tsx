@@ -59,17 +59,25 @@ export default async function AdminDashboardPage() {
             />
             <Stat
               label="Responses"
-              value={String(active?.survey.responseCount ?? 0)}
+              value={
+                active ? String(active.survey.responseCount) : "—"
+              }
               hint={
-                participation === null
-                  ? "On the active cycle"
-                  : `${participation}% of the roster`
+                !active
+                  ? "No live pulse"
+                  : participation === null
+                    ? "On the active cycle"
+                    : `${participation}% of the roster`
               }
             />
             <Stat
               label="Average score"
               value={formatScore(active?.survey.averageScore ?? null)}
-              hint="Scale questions on the active cycle"
+              hint={
+                active
+                  ? "Scale questions on the active cycle"
+                  : "No live pulse"
+              }
             />
             <Stat
               label="Roster"
@@ -117,10 +125,15 @@ export default async function AdminDashboardPage() {
                     </Link>
                   </div>
                 </>
-              ) : (
+              ) : snapshot.surveys.length === 0 ? (
                 <p className="mt-3 text-sm text-ink/70">
                   No surveys yet. Seed the weekly pulse or create one from
                   Surveys.
+                </p>
+              ) : (
+                <p className="mt-3 text-sm text-ink/70">
+                  No live pulse right now. Closed and draft surveys are listed
+                  below.
                 </p>
               )}
             </section>

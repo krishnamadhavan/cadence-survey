@@ -1,5 +1,6 @@
 import { count } from "drizzle-orm";
 import { db } from "@/db/client";
+import { arrangeDashboardSurveys } from "@/db/dashboard-select";
 import { employees, teams } from "@/db/schema";
 import { listSurveysForAdmin } from "@/db/queries";
 import { getSurveyResults, type SurveyResults } from "@/db/results";
@@ -23,8 +24,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     countRows(teams),
   ]);
 
-  const open = surveys.filter((survey) => survey.status === "open");
-  const featured = open[0] ?? surveys[0] ?? null;
+  const { newestFirst, featured } = arrangeDashboardSurveys(surveys);
   const active = featured
     ? await getSurveyResults(featured.publicToken)
     : null;
@@ -32,8 +32,8 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   return {
     employeeCount,
     teamCount,
-    surveys,
-    openCount: open.length,
+    surveys: newestFirst,
+    openCount: surveys.filter((survey) => survey.status === "open").length,
     active,
   };
 }
