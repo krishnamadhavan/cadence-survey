@@ -1,10 +1,21 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import { listTemplatesForAdmin } from "@/db/templates";
+import { TemplatesPanel } from "./templates-panel";
 
-export default function AdminTemplatesPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminTemplatesPage() {
+  let templates: Awaited<ReturnType<typeof listTemplatesForAdmin>> = [];
+  let dbError = false;
+
+  try {
+    templates = await listTemplatesForAdmin();
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Templates"
-      description="Reusable survey templates for new pulses. Coming soon."
-    />
+    <div className="w-full">
+      <TemplatesPanel templates={templates} dbError={dbError} />
+    </div>
   );
 }

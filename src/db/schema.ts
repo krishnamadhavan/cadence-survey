@@ -138,10 +138,52 @@ export const employeesRelations = relations(employees, ({ one }) => ({
   }),
 }));
 
+export const surveyTemplates = pgTable("survey_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const templateQuestions = pgTable(
+  "template_questions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => surveyTemplates.id, { onDelete: "cascade" }),
+    prompt: text("prompt").notNull(),
+    type: text("type").notNull().$type<QuestionType>(),
+    options: jsonb("options").$type<QuestionOptions>(),
+    position: integer("position").notNull(),
+    required: boolean("required").notNull().default(true),
+  },
+  (table) => [index("template_questions_template_id_idx").on(table.templateId)],
+);
+
 export const surveysRelations = relations(surveys, ({ many }) => ({
   questions: many(questions),
   responses: many(responses),
 }));
+
+export const surveyTemplatesRelations = relations(
+  surveyTemplates,
+  ({ many }) => ({
+    questions: many(templateQuestions),
+  }),
+);
+
+export const templateQuestionsRelations = relations(
+  templateQuestions,
+  ({ one }) => ({
+    template: one(surveyTemplates, {
+      fields: [templateQuestions.templateId],
+      references: [surveyTemplates.id],
+    }),
+  }),
+);
 
 export const questionsRelations = relations(questions, ({ one, many }) => ({
   survey: one(surveys, {
