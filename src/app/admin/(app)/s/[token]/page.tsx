@@ -46,13 +46,20 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-4xl text-ink">{results.survey.title}</h1>
-          <p className="mt-2 text-sm text-ink/50">
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink/50">
             <Link
               href={`/s/${results.survey.publicToken}`}
               className="hover:text-ink"
             >
               Public link
             </Link>
+            <span className="rounded-full border border-ink/10 px-2.5 py-0.5 text-xs font-medium text-ink/60">
+              {results.survey.status === "open"
+                ? "Live"
+                : results.survey.status === "closed"
+                  ? "Closed"
+                  : "Draft"}
+            </span>
           </p>
         </div>
         <div className="flex flex-col items-end gap-3">

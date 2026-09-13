@@ -4,7 +4,16 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { hash } from "bcryptjs";
 import { normalizeEmail } from "../lib/email";
-import { admins, answers, questions, responses, surveys, teams } from "./schema";
+import {
+  admins,
+  answers,
+  questions,
+  responses,
+  surveys,
+  surveyTemplates,
+  teams,
+  templateQuestions,
+} from "./schema";
 
 config({ path: ".env" });
 
@@ -145,6 +154,80 @@ async function ensureSurvey(db: SeedDb) {
   return { survey, questions: surveyQuestions, created: true };
 }
 
+const WEEKLY_PULSE_TEMPLATE_NAME = "Weekly pulse";
+
+async function ensureWeeklyPulseTemplate(db: SeedDb) {
+  const [existing] = await db
+    .select()
+    .from(surveyTemplates)
+    .where(eq(surveyTemplates.name, WEEKLY_PULSE_TEMPLATE_NAME))
+    .limit(1);
+
+  if (existing) {
+    const existingQuestions = await db
+      .select()
+      .from(templateQuestions)
+      .where(eq(templateQuestions.templateId, existing.id));
+    if (existingQuestions.length > 0) {
+      return { template: existing, created: false };
+    }
+    await db.insert(templateQuestions).values(weeklyPulseQuestions(existing.id));
+    return { template: existing, created: false };
+  }
+
+  const [template] = await db
+    .insert(surveyTemplates)
+    .values({
+      name: WEEKLY_PULSE_TEMPLATE_NAME,
+      description:
+        "A two-minute check-in. How was the week, and what should we know?",
+    })
+    .returning();
+
+  if (!template) {
+    throw new Error("Failed to insert weekly pulse template");
+  }
+
+  await db.insert(templateQuestions).values(weeklyPulseQuestions(template.id));
+  return { template, created: true };
+}
+
+function weeklyPulseQuestions(templateId: string) {
+  return [
+    {
+      templateId,
+      prompt: "How was your week?",
+      type: "scale" as const,
+      options: {
+        min: 1,
+        max: 5,
+        minLabel: "Rough",
+        maxLabel: "Great",
+      },
+      position: 1,
+      required: true,
+    },
+    {
+      templateId,
+      prompt: "Anything blocking you right now?",
+      type: "choice" as const,
+      options: {
+        choices: ["No", "A little", "Yes — I need help"],
+      },
+      position: 2,
+      required: true,
+    },
+    {
+      templateId,
+      prompt: "One thing we should start, stop, or keep doing?",
+      type: "text" as const,
+      options: null,
+      position: 3,
+      required: false,
+    },
+  ];
+}
+
 async function seedDemoResponses(
   db: SeedDb,
   surveyId: string,
@@ -246,11 +329,17 @@ async function seed() {
   await ensureAdmin(db);
   const teamsBySlug = await ensureTeams(db);
   const { survey, questions: surveyQuestions, created } = await ensureSurvey(db);
+  const weeklyTemplate = await ensureWeeklyPulseTemplate(db);
 
   console.log(
     created
       ? "Seeded weekly pulse survey."
       : `Survey already present (token: ${WEEKLY_PULSE_TOKEN}).`,
+  );
+  console.log(
+    weeklyTemplate.created
+      ? "Seeded weekly pulse template."
+      : "Weekly pulse template already present.",
   );
 
   await seedDemoResponses(db, survey.id, surveyQuestions, teamsBySlug);

@@ -39,8 +39,15 @@ export default async function AdminHomePage() {
                     {survey.responseCount === 1 ? "response" : "responses"}
                   </p>
                 </div>
-                <p className="mt-1 font-mono text-xs text-accent">
-                  /s/{survey.publicToken}
+                <p className="mt-1 flex items-center gap-2 font-mono text-xs text-accent">
+                  <span>/s/{survey.publicToken}</span>
+                  <span className="rounded-full border border-ink/10 px-2 py-0.5 font-sans font-medium text-ink/60">
+                    {survey.status === "open"
+                      ? "Live"
+                      : survey.status === "closed"
+                        ? "Closed"
+                        : "Draft"}
+                  </span>
                 </p>
               </Link>
             </li>
