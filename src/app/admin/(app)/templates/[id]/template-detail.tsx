@@ -134,38 +134,12 @@ export function TemplateDetailPanel({ template }: { template: TemplateDetail }) 
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-1">
-                    <form action={moveTemplateQuestionAction}>
-                      <input type="hidden" name="id" value={question.id} />
-                      <input
-                        type="hidden"
-                        name="templateId"
-                        value={template.id}
-                      />
-                      <input type="hidden" name="direction" value="up" />
-                      <button
-                        type="submit"
-                        disabled={index === 0}
-                        className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-35"
-                      >
-                        Up
-                      </button>
-                    </form>
-                    <form action={moveTemplateQuestionAction}>
-                      <input type="hidden" name="id" value={question.id} />
-                      <input
-                        type="hidden"
-                        name="templateId"
-                        value={template.id}
-                      />
-                      <input type="hidden" name="direction" value="down" />
-                      <button
-                        type="submit"
-                        disabled={index === template.questions.length - 1}
-                        className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-35"
-                      >
-                        Down
-                      </button>
-                    </form>
+                    <MoveQuestionControls
+                      questionId={question.id}
+                      templateId={template.id}
+                      canUp={index > 0}
+                      canDown={index < template.questions.length - 1}
+                    />
                     <button
                       type="button"
                       className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink"
@@ -199,6 +173,55 @@ export function TemplateDetailPanel({ template }: { template: TemplateDetail }) 
           onClose={() => setDialog(null)}
           returnFocusRef={addButtonRef}
         />
+      ) : null}
+    </>
+  );
+}
+
+function MoveQuestionControls({
+  questionId,
+  templateId,
+  canUp,
+  canDown,
+}: {
+  questionId: string;
+  templateId: string;
+  canUp: boolean;
+  canDown: boolean;
+}) {
+  const [state, action, pending] = useActionState<TemplateActionState, FormData>(
+    moveTemplateQuestionAction,
+    null,
+  );
+
+  return (
+    <>
+      <form action={action}>
+        <input type="hidden" name="id" value={questionId} />
+        <input type="hidden" name="templateId" value={templateId} />
+        <input type="hidden" name="direction" value="up" />
+        <button
+          type="submit"
+          disabled={!canUp || pending}
+          className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-35"
+        >
+          Up
+        </button>
+      </form>
+      <form action={action}>
+        <input type="hidden" name="id" value={questionId} />
+        <input type="hidden" name="templateId" value={templateId} />
+        <input type="hidden" name="direction" value="down" />
+        <button
+          type="submit"
+          disabled={!canDown || pending}
+          className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-35"
+        >
+          Down
+        </button>
+      </form>
+      {state?.error ? (
+        <p className="basis-full text-xs text-rose-800">{state.error}</p>
       ) : null}
     </>
   );

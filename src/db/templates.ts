@@ -231,38 +231,49 @@ export async function addTemplateQuestion(input: {
   maxLabel: string;
   choices: string;
 }): Promise<TemplateQuestionItem> {
-  await requireTemplate(input.templateId);
   const fields = parseQuestionFields(input);
 
-  const [last] = await db
-    .select({ position: templateQuestions.position })
-    .from(templateQuestions)
-    .where(eq(templateQuestions.templateId, input.templateId))
-    .orderBy(desc(templateQuestions.position))
-    .limit(1);
+  return db.transaction(async (tx) => {
+    const [template] = await tx
+      .select({ id: surveyTemplates.id })
+      .from(surveyTemplates)
+      .where(eq(surveyTemplates.id, input.templateId))
+      .for("update")
+      .limit(1);
+    if (!template) {
+      throw new TemplateNotFoundError("That template is gone.");
+    }
 
-  const [row] = await db
-    .insert(templateQuestions)
-    .values({
-      templateId: input.templateId,
-      prompt: fields.prompt,
-      type: fields.type,
-      options: fields.options,
-      required: input.required,
-      position: (last?.position ?? 0) + 1,
-    })
-    .returning({
-      id: templateQuestions.id,
-      prompt: templateQuestions.prompt,
-      type: templateQuestions.type,
-      options: templateQuestions.options,
-      position: templateQuestions.position,
-      required: templateQuestions.required,
-    });
-  if (!row) {
-    throw new Error("insert returned no question");
-  }
-  return row;
+    const [last] = await tx
+      .select({ position: templateQuestions.position })
+      .from(templateQuestions)
+      .where(eq(templateQuestions.templateId, input.templateId))
+      .orderBy(desc(templateQuestions.position))
+      .limit(1);
+
+    const [row] = await tx
+      .insert(templateQuestions)
+      .values({
+        templateId: input.templateId,
+        prompt: fields.prompt,
+        type: fields.type,
+        options: fields.options,
+        required: input.required,
+        position: (last?.position ?? 0) + 1,
+      })
+      .returning({
+        id: templateQuestions.id,
+        prompt: templateQuestions.prompt,
+        type: templateQuestions.type,
+        options: templateQuestions.options,
+        position: templateQuestions.position,
+        required: templateQuestions.required,
+      });
+    if (!row) {
+      throw new Error("insert returned no question");
+    }
+    return row;
+  });
 }
 
 export async function updateTemplateQuestion(input: {
@@ -451,17 +462,6 @@ function parseQuestionFields(input: {
     );
   }
   return { prompt, type, options: parsed.options };
-}
-
-async function requireTemplate(id: string) {
-  const [row] = await db
-    .select({ id: surveyTemplates.id })
-    .from(surveyTemplates)
-    .where(eq(surveyTemplates.id, id))
-    .limit(1);
-  if (!row) {
-    throw new TemplateNotFoundError("That template is gone.");
-  }
 }
 
 function newPublicToken() {

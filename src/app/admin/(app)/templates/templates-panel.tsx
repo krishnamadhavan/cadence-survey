@@ -379,20 +379,21 @@ function UseTemplateButton({
   );
 
   return (
-    <form action={action} className="inline">
+    <form action={action} className="flex flex-col items-end">
       <input type="hidden" name="id" value={id} />
       <button
         type="submit"
         disabled={disabled || pending}
-        title={
-          disabled
-            ? "Add a question first"
-            : (state?.error ?? "Start a draft pulse")
-        }
+        title={disabled ? "Add a question first" : "Start a draft pulse"}
         className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-35"
       >
         {pending ? "Starting…" : "Use"}
       </button>
+      {state?.error ? (
+        <p className="max-w-40 pt-1 text-right text-xs text-rose-800">
+          {state.error}
+        </p>
+      ) : null}
     </form>
   );
 }
@@ -509,23 +510,6 @@ function TemplateForm({
   );
   const [name, setName] = useState(template?.name ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
-
-  if (state?.ok && !template) {
-    return (
-      <div className="px-6 py-5">
-        <p className="text-sm text-ink/70">Template created.</p>
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-5 text-sm font-medium text-paper"
-            onClick={onCancel}
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col">

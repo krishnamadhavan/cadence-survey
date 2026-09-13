@@ -63,12 +63,27 @@ test("create, list, rename, question, and use a template; block conflicts and em
     choices: "",
   });
 
+  const second = await addTemplateQuestion({
+    templateId: created.id,
+    prompt: "Anything blocking you right now?",
+    type: "choice",
+    required: true,
+    min: "1",
+    max: "5",
+    minLabel: "",
+    maxLabel: "",
+    choices: "No\nA little\nYes — I need help",
+  });
+
   const withQuestion = (await listTemplatesForAdmin()).find(
     (template) => template.id === created.id,
   );
-  assert.equal(withQuestion?.questionCount, 1);
+  assert.equal(withQuestion?.questionCount, 2);
   assert.equal(withQuestion?.questions[0]?.prompt, "How was your week?");
   assert.equal(withQuestion?.questions[0]?.type, "scale");
+  assert.equal(withQuestion?.questions[0]?.position, 1);
+  assert.equal(second.position, 2);
+  assert.equal(withQuestion?.questions[1]?.position, 2);
 
   const renamed = await updateTemplate({
     id: created.id,
@@ -93,7 +108,7 @@ test("create, list, rename, question, and use a template; block conflicts and em
     .select({ prompt: questions.prompt, type: questions.type })
     .from(questions)
     .where(eq(questions.surveyId, survey.id));
-  assert.equal(copied.length, 1);
+  assert.equal(copied.length, 2);
   assert.equal(copied[0]?.type, "scale");
 
   await deleteTemplate(created.id);

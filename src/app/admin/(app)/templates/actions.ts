@@ -132,15 +132,17 @@ export async function useTemplateAction(
     return fail("That template is not valid.");
   }
 
+  let survey: { publicToken: string };
   try {
-    await createDraftFromTemplate(id.data);
+    survey = await createDraftFromTemplate(id.data);
   } catch (error) {
     return fail(
       actionError(error, "Could not start a pulse from this template."),
     );
   }
   revalidateTemplatePages(id.data);
-  redirect("/admin");
+  revalidatePath(`/admin/s/${survey.publicToken}`);
+  redirect(`/admin/s/${survey.publicToken}`);
 }
 
 export async function addTemplateQuestionAction(
@@ -220,7 +222,10 @@ export async function deleteTemplateQuestionAction(
   }
 }
 
-export async function moveTemplateQuestionAction(formData: FormData) {
+export async function moveTemplateQuestionAction(
+  _prev: TemplateActionState,
+  formData: FormData,
+): Promise<TemplateActionState> {
   if (!(await hasAdminSession())) {
     redirect("/admin/login?next=/admin/templates");
   }
@@ -229,14 +234,17 @@ export async function moveTemplateQuestionAction(formData: FormData) {
   const templateId = idSchema.safeParse(String(formData.get("templateId") ?? ""));
   const direction = String(formData.get("direction") ?? "");
   if (!id.success || (direction !== "up" && direction !== "down")) {
-    return;
+    return fail("That move is not valid.");
   }
 
   try {
     await moveTemplateQuestion({ id: id.data, direction });
     revalidateTemplatePages(templateId.success ? templateId.data : undefined);
-  } catch {
-    return;
+    return { ok: true, error: null };
+  } catch (error) {
+    return fail(
+      actionError(error, "Could not reorder the question. Is Postgres running?"),
+    );
   }
 }
 
