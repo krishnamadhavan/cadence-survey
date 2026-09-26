@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
+import { listSurveyQuestions } from "@/db/surveys";
 import type { SurveyStatus } from "@/db/schema";
 import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
 import { formatSurveyStatus } from "@/lib/survey-status";
 import { ExportButtons } from "./export-buttons";
+import { SurveyDraftEditor } from "./survey-editor";
 import { SurveyLifecycle } from "./survey-lifecycle";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +40,8 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   }
 
   const status = results.survey.status as SurveyStatus;
+  const draftQuestions =
+    status === "draft" ? await listSurveyQuestions(results.survey.publicToken) : [];
   const struggling = results.teams.filter(
     (team) =>
       team.health !== "ok" &&
@@ -75,6 +79,14 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           </p>
         </div>
       </header>
+
+      {status === "draft" ? (
+        <SurveyDraftEditor
+          token={results.survey.publicToken}
+          title={results.survey.title}
+          questions={draftQuestions}
+        />
+      ) : null}
 
       <section className="mt-10 grid gap-3 sm:grid-cols-3">
         <Stat label="Responses" value={String(results.survey.responseCount)} />
