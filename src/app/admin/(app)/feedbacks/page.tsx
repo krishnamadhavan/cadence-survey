@@ -1,10 +1,25 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import { listFeedbackSurveys, listPublishedFeedback } from "@/db/feedbacks";
+import { FeedbacksPanel } from "./feedbacks-panel";
 
-export default function AdminFeedbacksPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminFeedbacksPage() {
+  let feedback: Awaited<ReturnType<typeof listPublishedFeedback>> = [];
+  let surveys: Awaited<ReturnType<typeof listFeedbackSurveys>> = [];
+  let dbError = false;
+
+  try {
+    [feedback, surveys] = await Promise.all([
+      listPublishedFeedback(),
+      listFeedbackSurveys(),
+    ]);
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Feedbacks"
-      description="Open-text comments and pulse feedback across surveys. Coming soon."
-    />
+    <div className="w-full">
+      <FeedbacksPanel feedback={feedback} surveys={surveys} dbError={dbError} />
+    </div>
   );
 }

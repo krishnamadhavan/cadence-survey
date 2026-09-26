@@ -22,6 +22,27 @@ test("omits every comment when the leftover cannot be published", () => {
   assert.deepEqual(comments, []);
 });
 
+test("keeps named-team comments when every team is large enough to publish", () => {
+  const comments = collectPublishedComments(
+    [
+      {
+        question: "Notes?",
+        teamKey: "ops",
+        teamName: "Operations",
+        text: "On-call is brutal.",
+      },
+    ],
+    {
+      namedKeys: ["ops"],
+      suppressedKeys: [],
+      showSuppressedBucket: false,
+    },
+  );
+
+  assert.equal(comments.length, 1);
+  assert.equal(comments[0]?.teamName, "Operations");
+});
+
 test("drops suppressed-team comments and never uses their real name", () => {
   const comments = collectPublishedComments(
     [

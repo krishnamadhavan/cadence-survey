@@ -18,28 +18,30 @@ export type CommentDraft = {
  * Suppressed teams are omitted so a leftover of 1–2 cannot be read.
  * When the plan cannot publish a bucket at all, nothing is exported.
  */
+export function isPublishedComment(
+  draft: CommentDraft,
+  plan: TeamPublishPlan,
+): boolean {
+  if (plan.namedKeys.length === 0 || !draft.text.trim()) {
+    return false;
+  }
+  return plan.namedKeys.includes(draft.teamKey);
+}
+
 export function collectPublishedComments(
   drafts: CommentDraft[],
   plan: TeamPublishPlan,
 ): WrittenComment[] {
-  if (!plan.showSuppressedBucket) {
-    return [];
-  }
-
-  const named = new Set(plan.namedKeys);
   const comments: WrittenComment[] = [];
-
   for (const draft of drafts) {
-    const text = draft.text.trim();
-    if (!text || !named.has(draft.teamKey)) {
+    if (!isPublishedComment(draft, plan)) {
       continue;
     }
     comments.push({
       question: draft.question,
       teamName: draft.teamName,
-      text,
+      text: draft.text.trim(),
     });
   }
-
   return comments;
 }
