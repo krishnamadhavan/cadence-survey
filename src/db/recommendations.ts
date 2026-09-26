@@ -16,6 +16,7 @@ export type Recommendation = {
   id: string;
   surveyToken: string;
   surveyTitle: string;
+  teamId: string | null;
   teamName: string;
   averageScore: number;
   health: Exclude<TeamHealth, "ok">;
@@ -57,6 +58,7 @@ export async function listRecommendations(): Promise<Recommendation[]> {
         id: `${survey.token}:${team.teamId ?? "unassigned"}`,
         surveyToken: survey.token,
         surveyTitle: survey.title,
+        teamId: team.teamId,
         teamName: team.teamName,
         averageScore: team.averageScore,
         health: team.health,

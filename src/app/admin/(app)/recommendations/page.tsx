@@ -1,3 +1,4 @@
+import { listOpenPlanKeys } from "@/db/action-plans";
 import {
   listRecommendationSurveys,
   listRecommendations,
@@ -9,12 +10,14 @@ export const dynamic = "force-dynamic";
 export default async function AdminRecommendationsPage() {
   let recommendations: Awaited<ReturnType<typeof listRecommendations>> = [];
   let surveys: Awaited<ReturnType<typeof listRecommendationSurveys>> = [];
+  let openPlanKeys: string[] = [];
   let dbError = false;
 
   try {
-    [recommendations, surveys] = await Promise.all([
+    [recommendations, surveys, openPlanKeys] = await Promise.all([
       listRecommendations(),
       listRecommendationSurveys(),
+      listOpenPlanKeys(),
     ]);
   } catch {
     dbError = true;
@@ -25,6 +28,7 @@ export default async function AdminRecommendationsPage() {
       <RecommendationsPanel
         recommendations={recommendations}
         surveys={surveys}
+        openPlanKeys={openPlanKeys}
         dbError={dbError}
       />
     </div>

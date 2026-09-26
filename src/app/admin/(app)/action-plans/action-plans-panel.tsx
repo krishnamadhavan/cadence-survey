@@ -2,19 +2,16 @@
 
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
-import type {
-  Recommendation,
-  RecommendationSurveyOption,
-} from "@/db/recommendations";
+import type { ActionPlanItem } from "@/db/action-plans";
+import type { RecommendationSurveyOption } from "@/db/recommendations";
 import {
-  createActionPlanAction,
+  setActionPlanStatusAction,
   type ActionPlanActionState,
-} from "../action-plans/actions";
+} from "./actions";
 
-type RecommendationsPanelProps = {
-  recommendations: Recommendation[];
+type ActionPlansPanelProps = {
+  plans: ActionPlanItem[];
   surveys: RecommendationSurveyOption[];
-  openPlanKeys: string[];
   dbError: boolean;
 };
 
@@ -42,22 +39,21 @@ function visiblePages(current: number, total: number): Array<number | "gap"> {
   return items;
 }
 
-export function RecommendationsPanel({
-  recommendations,
-  surveys,
-  openPlanKeys,
-  dbError,
-}: RecommendationsPanelProps) {
+export function ActionPlansPanel({ plans, surveys, dbError }: ActionPlansPanelProps) {
   const [query, setQuery] = useState("");
   const [surveyToken, setSurveyToken] = useState("all");
+  const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pageSizeDraft, setPageSizeDraft] = useState(String(DEFAULT_PAGE_SIZE));
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return recommendations.filter((row) => {
+    return plans.filter((row) => {
       if (surveyToken !== "all" && row.surveyToken !== surveyToken) {
+        return false;
+      }
+      if (status !== "all" && row.status !== status) {
         return false;
       }
       if (!needle) {
@@ -66,13 +62,12 @@ export function RecommendationsPanel({
       return (
         row.surveyTitle.toLowerCase().includes(needle) ||
         row.teamName.toLowerCase().includes(needle) ||
-        row.followUp.toLowerCase().includes(needle) ||
-        row.health.includes(needle)
+        row.followUp.toLowerCase().includes(needle)
       );
     });
-  }, [recommendations, query, surveyToken]);
+  }, [plans, query, status, surveyToken]);
 
-  const filtersActive = query.trim() !== "" || surveyToken !== "all";
+  const filtersActive = query.trim() !== "" || surveyToken !== "all" || status !== "all";
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize;
@@ -97,17 +92,17 @@ export function RecommendationsPanel({
   return (
     <>
       <div className="min-w-0">
-        <h1 className="font-serif text-4xl text-ink">Recommendations</h1>
+        <h1 className="font-serif text-4xl text-ink">Action plans</h1>
         <p className="mt-2 text-ink/60">
-          Next steps for named teams that are low or on watch. Teams under the
-          anonymity floor are left out.
+          Follow-ups taken from recommendations. A team can have one open plan
+          per pulse.
         </p>
       </div>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
           <label className="relative min-w-0 flex-1 sm:max-w-xs">
-            <span className="sr-only">Search recommendations</span>
+            <span className="sr-only">Search action plans</span>
             <input
               value={query}
               onChange={(event) => {
@@ -136,6 +131,21 @@ export function RecommendationsPanel({
               ))}
             </select>
           </label>
+          <label className="relative shrink-0">
+            <span className="sr-only">Filter by status</span>
+            <select
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
+              className="h-10 appearance-none rounded-full border border-ink/10 bg-white/70 py-0 pr-9 pl-4 text-sm text-ink outline-none focus:border-ink/30"
+            >
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="done">Done</option>
+            </select>
+          </label>
           {filtersActive ? (
             <button
               type="button"
@@ -143,6 +153,7 @@ export function RecommendationsPanel({
               onClick={() => {
                 setQuery("");
                 setSurveyToken("all");
+                setStatus("all");
                 setPage(1);
               }}
             >
@@ -150,10 +161,10 @@ export function RecommendationsPanel({
             </button>
           ) : null}
         </div>
-        {!dbError && recommendations.length > 0 ? (
+        {!dbError && plans.length > 0 ? (
           <p className="shrink-0 text-sm text-ink/40">
             {filtered.length === 0
-              ? "0 recommendations"
+              ? "0 plans"
               : `${rangeStart + 1}–${rangeEnd} of ${filtered.length}`}
           </p>
         ) : null}
@@ -162,24 +173,28 @@ export function RecommendationsPanel({
       <section className="mt-4">
         {dbError ? (
           <p className="mt-4 text-ink/70">Could not reach Postgres.</p>
-        ) : recommendations.length === 0 ? (
+        ) : plans.length === 0 ? (
           <p className="mt-4 text-ink/70">
-            No named teams are low or on watch.
+            No plans yet. Add one from{" "}
+            <Link href="/admin/recommendations" className="underline-offset-4 hover:underline">
+              Recommendations
+            </Link>
+            .
           </p>
         ) : filtered.length === 0 ? (
-          <p className="mt-4 text-ink/70">No recommendations match these filters.</p>
+          <p className="mt-4 text-ink/70">No plans match these filters.</p>
         ) : (
           <>
             <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
-              <table className="w-full min-w-[64rem] text-left text-sm">
+              <table className="w-full min-w-[56rem] text-left text-sm">
                 <thead className="border-b border-ink/10 text-ink/45">
                   <tr>
                     <th className="px-4 py-3 font-medium">Survey</th>
                     <th className="px-4 py-3 font-medium">Team</th>
-                    <th className="px-4 py-3 font-medium">Average</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Follow-up</th>
-                    <th className="px-4 py-3 font-medium">Plan</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Opened</th>
+                    <th className="px-4 py-3 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -194,19 +209,17 @@ export function RecommendationsPanel({
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-ink/70">{row.teamName}</td>
-                      <td className="px-4 py-3 text-ink">{row.averageScore.toFixed(1)}</td>
-                      <td className="px-4 py-3">
-                        <span className={healthClass(row.health)}>{healthLabel(row.health)}</span>
-                      </td>
                       <td className="max-w-md px-4 py-3 text-ink">{row.followUp}</td>
                       <td className="px-4 py-3">
-                        <AddPlanButton
-                          token={row.surveyToken}
-                          teamKey={row.teamId ?? "unassigned"}
-                          planned={openPlanKeys.includes(
-                            `${row.surveyToken}:${row.teamId ?? "unassigned"}`,
-                          )}
-                        />
+                        <span className={statusClass(row.status)}>
+                          {row.status === "open" ? "Open" : "Done"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-ink/70">
+                        {formatDate(row.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusButton id={row.id} status={row.status} />
                       </td>
                     </tr>
                   ))}
@@ -281,52 +294,43 @@ export function RecommendationsPanel({
   );
 }
 
-function AddPlanButton({
-  token,
-  teamKey,
-  planned,
-}: {
-  token: string;
-  teamKey: string;
-  planned: boolean;
-}) {
+function StatusButton({ id, status }: { id: string; status: "open" | "done" }) {
   const [state, action, pending] = useActionState<ActionPlanActionState, FormData>(
-    createActionPlanAction,
+    setActionPlanStatusAction,
     null,
   );
-  if (planned || state?.ok) {
-    return (
-      <Link
-        href="/admin/action-plans"
-        className="text-sm font-medium text-ink underline-offset-4 hover:underline"
-      >
-        On the plan
-      </Link>
-    );
-  }
+  const next = status === "open" ? "done" : "open";
   return (
     <form action={action} className="flex flex-col items-start gap-1">
-      <input type="hidden" name="token" value={token} />
-      <input type="hidden" name="teamKey" value={teamKey} />
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="status" value={next} />
       <button
         type="submit"
         disabled={pending}
         className="inline-flex h-8 items-center rounded-full border border-ink/15 px-3 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-50"
       >
-        {pending ? "Adding…" : "Add to plan"}
+        {pending ? "Saving…" : status === "open" ? "Mark done" : "Reopen"}
       </button>
       {state?.error ? <p className="text-xs text-rose-800">{state.error}</p> : null}
     </form>
   );
 }
 
-function healthLabel(health: "low" | "watch") {
-  return health === "low" ? "Low" : "Watch";
-}
-
-function healthClass(health: "low" | "watch") {
-  if (health === "low") {
-    return "rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800";
+function statusClass(status: "open" | "done") {
+  if (status === "done") {
+    return "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800";
   }
   return "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900";
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }

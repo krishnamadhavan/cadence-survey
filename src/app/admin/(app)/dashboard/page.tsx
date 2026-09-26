@@ -272,7 +272,7 @@ export default async function AdminDashboardPage() {
               <Shortcut
                 href="/admin/action-plans"
                 title="Action plans"
-                body="Follow-ups after a pulse. Coming soon."
+                body="Track follow-ups taken from recommendations."
               />
               <Shortcut
                 href="/admin/recommendations"
