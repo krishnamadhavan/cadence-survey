@@ -3,6 +3,17 @@ import { db } from "@/db/client";
 import { questions, responses, surveys, teams } from "@/db/schema";
 import type { QuestionType, SurveyStatus } from "@/db/schema";
 
+export type AdminSurveyListItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  publicToken: string;
+  status: SurveyStatus;
+  createdAt: string;
+  responseCount: number;
+  questionCount: number;
+};
+
 export type SurveyQuestion = {
   id: string;
   prompt: string;
@@ -81,33 +92,46 @@ export async function listTeams() {
     .orderBy(asc(teams.name));
 }
 
-export async function listSurveysForAdmin() {
-  const rows = await db
-    .select({
-      id: surveys.id,
-      title: surveys.title,
-      description: surveys.description,
-      publicToken: surveys.publicToken,
-      status: surveys.status,
-    })
-    .from(surveys)
-    .orderBy(asc(surveys.createdAt));
+export async function listSurveysForAdmin(): Promise<AdminSurveyListItem[]> {
+  const [rows, responseRows, questionRows] = await Promise.all([
+    db
+      .select({
+        id: surveys.id,
+        title: surveys.title,
+        description: surveys.description,
+        publicToken: surveys.publicToken,
+        status: surveys.status,
+        createdAt: surveys.createdAt,
+      })
+      .from(surveys)
+      .orderBy(asc(surveys.createdAt)),
+    db
+      .select({
+        surveyId: responses.surveyId,
+        n: count(),
+      })
+      .from(responses)
+      .groupBy(responses.surveyId),
+    db
+      .select({
+        surveyId: questions.surveyId,
+        n: count(),
+      })
+      .from(questions)
+      .groupBy(questions.surveyId),
+  ]);
 
-  const withCounts = await Promise.all(
-    rows.map(async (survey) => ({
-      ...survey,
-      responseCount: await countResponses(survey.id),
-    })),
+  const responsesBySurvey = new Map(
+    responseRows.map((row) => [row.surveyId, Number(row.n)]),
+  );
+  const questionsBySurvey = new Map(
+    questionRows.map((row) => [row.surveyId, Number(row.n)]),
   );
 
-  return withCounts;
-}
-
-export async function countResponses(surveyId: string): Promise<number> {
-  const [row] = await db
-    .select({ value: count() })
-    .from(responses)
-    .where(eq(responses.surveyId, surveyId));
-
-  return row?.value ?? 0;
+  return rows.map((survey) => ({
+    ...survey,
+    createdAt: survey.createdAt.toISOString(),
+    responseCount: responsesBySurvey.get(survey.id) ?? 0,
+    questionCount: questionsBySurvey.get(survey.id) ?? 0,
+  }));
 }

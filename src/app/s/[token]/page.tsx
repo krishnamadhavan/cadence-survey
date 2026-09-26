@@ -57,7 +57,11 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
       <Shell>
         <p className="text-sm tracking-wide text-accent uppercase">Cadence</p>
         <h1 className="mt-3 font-serif text-4xl text-ink">{survey.title}</h1>
-        <p className="mt-4 text-ink/70">This pulse is closed.</p>
+        <p className="mt-4 text-ink/70">
+          {survey.status === "draft"
+            ? "This pulse is not open yet."
+            : "This pulse is closed."}
+        </p>
       </Shell>
     );
   }

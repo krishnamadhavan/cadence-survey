@@ -2,8 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
+import type { SurveyStatus } from "@/db/schema";
 import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
+import { formatSurveyStatus } from "@/lib/survey-status";
 import { ExportButtons } from "./export-buttons";
+import { SurveyLifecycle } from "./survey-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +37,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
     notFound();
   }
 
+  const status = results.survey.status as SurveyStatus;
   const struggling = results.teams.filter(
     (team) =>
       team.health !== "ok" &&
@@ -54,15 +58,16 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
               Public link
             </Link>
             <span className="rounded-full border border-ink/10 px-2.5 py-0.5 text-xs font-medium text-ink/60">
-              {results.survey.status === "open"
-                ? "Live"
-                : results.survey.status === "closed"
-                  ? "Closed"
-                  : "Draft"}
+              {formatSurveyStatus(status)}
             </span>
           </p>
         </div>
         <div className="flex flex-col items-end gap-3">
+          <SurveyLifecycle
+            token={results.survey.publicToken}
+            status={status}
+            questionCount={results.questions.length}
+          />
           <ExportButtons token={results.survey.publicToken} />
           <p className="max-w-xs text-right text-xs text-ink/45">
             CSV and Excel include written comments from teams that meet the
