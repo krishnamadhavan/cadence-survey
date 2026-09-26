@@ -1,10 +1,32 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import {
+  listRecommendationSurveys,
+  listRecommendations,
+} from "@/db/recommendations";
+import { RecommendationsPanel } from "./recommendations-panel";
 
-export default function AdminRecommendationsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminRecommendationsPage() {
+  let recommendations: Awaited<ReturnType<typeof listRecommendations>> = [];
+  let surveys: Awaited<ReturnType<typeof listRecommendationSurveys>> = [];
+  let dbError = false;
+
+  try {
+    [recommendations, surveys] = await Promise.all([
+      listRecommendations(),
+      listRecommendationSurveys(),
+    ]);
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Recommendations"
-      description="Suggested next steps from pulse results. Coming soon."
-    />
+    <div className="w-full">
+      <RecommendationsPanel
+        recommendations={recommendations}
+        surveys={surveys}
+        dbError={dbError}
+      />
+    </div>
   );
 }
