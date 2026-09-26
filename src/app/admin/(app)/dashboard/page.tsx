@@ -277,7 +277,7 @@ export default async function AdminDashboardPage() {
               <Shortcut
                 href="/admin/recommendations"
                 title="Recommendations"
-                body="Suggested next steps. Coming soon."
+                body="Follow-ups for teams that are low or on watch."
               />
             </ul>
           </section>
