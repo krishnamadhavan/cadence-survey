@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -7,11 +7,15 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
 export const surveyStatuses = ["draft", "open", "closed"] as const;
 export type SurveyStatus = (typeof surveyStatuses)[number];
+
+export const actionPlanStatuses = ["open", "done"] as const;
+export type ActionPlanStatus = (typeof actionPlanStatuses)[number];
 
 export const questionTypes = ["scale", "text", "choice"] as const;
 export type QuestionType = (typeof questionTypes)[number];
@@ -161,6 +165,31 @@ export const templateQuestions = pgTable(
     required: boolean("required").notNull().default(true),
   },
   (table) => [index("template_questions_template_id_idx").on(table.templateId)],
+);
+
+export const actionPlans = pgTable(
+  "action_plans",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    surveyId: uuid("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id").references(() => teams.id, { onDelete: "restrict" }),
+    teamKey: text("team_key").notNull(),
+    teamName: text("team_name").notNull(),
+    followUp: text("follow_up").notNull(),
+    status: text("status").notNull().$type<ActionPlanStatus>().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("action_plans_survey_id_idx").on(table.surveyId),
+    uniqueIndex("action_plans_open_survey_team_idx")
+      .on(table.surveyId, table.teamKey)
+      .where(sql`${table.status} = 'open'`),
+  ],
 );
 
 export const surveysRelations = relations(surveys, ({ many }) => ({
