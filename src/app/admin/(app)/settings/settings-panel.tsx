@@ -43,7 +43,7 @@ export function SettingsPanel({
               name="anonymityFloor"
               type="number"
               inputMode="numeric"
-              min={2}
+              min={3}
               max={50}
               required
               value={value}
@@ -51,7 +51,7 @@ export function SettingsPanel({
               onChange={(event) => setValue(event.target.value)}
             />
           </label>
-          <p className="mt-2 text-xs text-ink/40">Current value is {floor}. Use 2–50.</p>
+          <p className="mt-2 text-xs text-ink/40">Current value is {floor}. Use 3–50.</p>
           {state?.error ? (
             <p className="mt-3 text-sm text-rose-800">{state.error}</p>
           ) : state?.ok ? (

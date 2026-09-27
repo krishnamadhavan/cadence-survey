@@ -3,7 +3,7 @@ import { db } from "@/db/client";
 import { workspaceSettings } from "@/db/schema";
 import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
 
-export const ANONYMITY_FLOOR_MIN = 2;
+export const ANONYMITY_FLOOR_MIN = 3;
 export const ANONYMITY_FLOOR_MAX = 50;
 const SETTINGS_ID = "default";
 

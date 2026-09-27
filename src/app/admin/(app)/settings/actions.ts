@@ -24,7 +24,7 @@ export async function setAnonymityFloorAction(
   const raw = String(formData.get("anonymityFloor") ?? "").trim();
   const value = Number(raw);
   if (!/^\d+$/.test(raw) || !Number.isInteger(value)) {
-    return fail("The anonymity floor must be a whole number from 2 to 50.");
+    return fail("The anonymity floor must be a whole number from 3 to 50.");
   }
   try {
     await setAnonymityFloor(value);

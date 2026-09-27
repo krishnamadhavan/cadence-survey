@@ -19,6 +19,7 @@ test("reads and updates the anonymity floor", async (t) => {
   assert.equal(await getAnonymityFloor(), 5);
 
   await assert.rejects(() => setAnonymityFloor(1), SettingsValidationError);
+  await assert.rejects(() => setAnonymityFloor(2), SettingsValidationError);
   await assert.rejects(() => setAnonymityFloor(51), SettingsValidationError);
   await assert.rejects(() => setAnonymityFloor(3.5), SettingsValidationError);
   assert.equal(await getAnonymityFloor(), 5);

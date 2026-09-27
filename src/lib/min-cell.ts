@@ -21,7 +21,7 @@ export function planTeamPublish(
   minResponses: number = MIN_TEAM_RESPONSES,
 ): TeamPublishPlan {
   const minimum =
-    Number.isInteger(minResponses) && minResponses >= 2
+    Number.isInteger(minResponses) && minResponses >= MIN_TEAM_RESPONSES
       ? minResponses
       : MIN_TEAM_RESPONSES;
   const withData = teams.filter((team) => team.count > 0);
