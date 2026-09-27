@@ -56,3 +56,25 @@ export async function destroyAdminSession(
 ): Promise<void> {
   return destroyStoredSession(token, store);
 }
+
+export async function destroySessionsForAdmin(adminId: string): Promise<void> {
+  let cursor = "0";
+  do {
+    const [next, keys] = (await redis.scan(
+      cursor,
+      "MATCH",
+      "session:admin:*",
+      "COUNT",
+      100,
+    )) as [string, string[]];
+    cursor = next;
+    if (keys.length === 0) {
+      continue;
+    }
+    const values = await redis.mget(...keys);
+    const stale = keys.filter((key, index) => values[index] === adminId);
+    if (stale.length > 0) {
+      await redis.del(...stale);
+    }
+  } while (cursor !== "0");
+}
