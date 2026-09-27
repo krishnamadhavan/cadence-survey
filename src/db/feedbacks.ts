@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { SurveyStatus } from "@/db/schema";
 import { isPublishedComment, type CommentDraft } from "@/lib/comments";
+import { getAnonymityFloor } from "@/db/settings";
 import { planTeamPublish, teamPublishKey } from "@/lib/min-cell";
 
 export type FeedbackSurveyOption = {
@@ -68,6 +69,7 @@ export async function listPublishedFeedback(): Promise<PublishedFeedback[]> {
   }
 
   const published: PublishedFeedback[] = [];
+  const anonymityFloor = await getAnonymityFloor();
   for (const survey of surveyRows) {
     const surveyRowsForPlan = bySurvey.get(survey.token) ?? [];
     const teamResponseIds = new Map<string, Set<string>>();
@@ -82,6 +84,7 @@ export async function listPublishedFeedback(): Promise<PublishedFeedback[]> {
         key,
         count: ids.size,
       })),
+      anonymityFloor,
     );
 
     for (const row of surveyRowsForPlan) {

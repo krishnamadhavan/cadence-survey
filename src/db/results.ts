@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
+import { getAnonymityFloor } from "@/db/settings";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { ChoiceOptions, QuestionType, ScaleOptions } from "@/db/schema";
 import {
@@ -286,6 +287,7 @@ export async function getSurveyResults(
       key,
       count: ids.size,
     })),
+    await getAnonymityFloor(),
   );
   const namedKeys = new Set(publishPlan.namedKeys);
   const suppressedKeys = new Set(publishPlan.suppressedKeys);
@@ -524,6 +526,7 @@ export async function getPublishedComments(
       key,
       count: ids.size,
     })),
+    await getAnonymityFloor(),
   );
 
   const drafts: {
