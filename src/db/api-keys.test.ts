@@ -1,6 +1,6 @@
 import "./../lib/load-env";
 import assert from "node:assert/strict";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 import { test } from "node:test";
 import {
   ApiKeyNotFoundError,
@@ -11,7 +11,8 @@ import {
   revokeApiKey,
 } from "@/db/api-keys";
 import { db, pg } from "@/db/client";
-import { apiKeys } from "@/db/schema";
+import { listAuditEvents } from "@/db/audit-log";
+import { admins, apiKeys, auditEvents } from "@/db/schema";
 
 const stamp = Date.now();
 const nameA = `QA key ${stamp}`;
@@ -20,6 +21,7 @@ const nameB = `QA key b ${stamp}`;
 test("creates a secret once, lists only a prefix, and rejects a revoked key", async (t) => {
   const ids: string[] = [];
   t.after(async () => {
+    await db.delete(auditEvents).where(like(auditEvents.summary, `%${stamp}%`));
     if (ids.length > 0) {
       await db.delete(apiKeys).where(inArray(apiKeys.id, ids));
     }
@@ -69,5 +71,33 @@ test("creates a secret once, lists only a prefix, and rejects a revoked key", as
   await assert.rejects(
     () => revokeApiKey("00000000-0000-4000-8000-000000000000"),
     ApiKeyNotFoundError,
+  );
+
+  const rollbackName = `QA rollback ${stamp}`;
+  await assert.rejects(() =>
+    createApiKey(rollbackName, {
+      actorId: "00000000-0000-4000-8000-000000000099",
+      actorEmail: "missing@cadence.test",
+    }),
+  );
+  assert.equal(
+    (await listApiKeys()).some((key) => key.name === rollbackName),
+    false,
+  );
+
+  const [admin] = await db
+    .select({ id: admins.id, email: admins.email })
+    .from(admins)
+    .limit(1);
+  assert.ok(admin);
+  const audited = await createApiKey(`QA audited ${stamp}`, {
+    actorId: admin.id,
+    actorEmail: admin.email,
+  });
+  ids.push(audited.id);
+  assert.ok(
+    (await listAuditEvents()).some(
+      (event) => event.summary === `Created API key QA audited ${stamp}`,
+    ),
   );
 });

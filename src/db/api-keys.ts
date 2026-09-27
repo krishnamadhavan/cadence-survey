@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
+import { recordAudit } from "@/db/audit-log";
 import { db } from "@/db/client";
 import { apiKeys } from "@/db/schema";
 
@@ -46,43 +47,75 @@ export async function listApiKeys(): Promise<ApiKeyListItem[]> {
   }));
 }
 
-export async function createApiKey(name: string): Promise<CreatedApiKey> {
+export async function createApiKey(
+  name: string,
+  audit?: { actorId: string; actorEmail: string },
+): Promise<CreatedApiKey> {
   const label = name.trim();
   if (!label || label.length > NAME_MAX) {
     throw new ApiKeyValidationError("Name must be 1–80 characters.");
   }
   const secret = `ck_${randomBytes(24).toString("hex")}`;
   const prefix = `${secret.slice(0, 7)}…`;
-  const [row] = await db
-    .insert(apiKeys)
-    .values({
-      name: label,
-      prefix,
-      keyHash: hashApiKey(secret),
-    })
-    .returning({ id: apiKeys.id, name: apiKeys.name, prefix: apiKeys.prefix });
-  if (!row) {
-    throw new ApiKeyValidationError("Could not create that key.");
-  }
-  return { ...row, secret };
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(apiKeys)
+      .values({
+        name: label,
+        prefix,
+        keyHash: hashApiKey(secret),
+      })
+      .returning({ id: apiKeys.id, name: apiKeys.name, prefix: apiKeys.prefix });
+    if (!row) {
+      throw new ApiKeyValidationError("Could not create that key.");
+    }
+    if (audit) {
+      await recordAudit(
+        {
+          actorId: audit.actorId,
+          actorEmail: audit.actorEmail,
+          action: "api_key.created",
+          summary: `Created API key ${label}`,
+        },
+        tx,
+      );
+    }
+    return { ...row, secret };
+  });
 }
 
-export async function revokeApiKey(id: string): Promise<void> {
-  const [existing] = await db
-    .select({ id: apiKeys.id, revokedAt: apiKeys.revokedAt })
-    .from(apiKeys)
-    .where(eq(apiKeys.id, id))
-    .limit(1);
-  if (!existing) {
-    throw new ApiKeyNotFoundError("That key is gone.");
-  }
-  if (existing.revokedAt) {
-    throw new ApiKeyValidationError("That key is already revoked.");
-  }
-  await db
-    .update(apiKeys)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)));
+export async function revokeApiKey(
+  id: string,
+  audit?: { actorId: string; actorEmail: string },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: apiKeys.id, name: apiKeys.name, revokedAt: apiKeys.revokedAt })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, id))
+      .limit(1);
+    if (!existing) {
+      throw new ApiKeyNotFoundError("That key is gone.");
+    }
+    if (existing.revokedAt) {
+      throw new ApiKeyValidationError("That key is already revoked.");
+    }
+    await tx
+      .update(apiKeys)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)));
+    if (audit) {
+      await recordAudit(
+        {
+          actorId: audit.actorId,
+          actorEmail: audit.actorEmail,
+          action: "api_key.revoked",
+          summary: `Revoked API key ${existing.name}`,
+        },
+        tx,
+      );
+    }
+  });
 }
 
 export async function findActiveApiKey(token: string): Promise<{ id: string } | null> {

@@ -1,10 +1,20 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import { listAuditEvents } from "@/db/audit-log";
+import { AuditLogPanel } from "./audit-log-panel";
 
-export default function AdminAuditLogPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminAuditLogPage() {
+  let events: Awaited<ReturnType<typeof listAuditEvents>> = [];
+  let dbError = false;
+  try {
+    events = await listAuditEvents();
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Audit Log"
-      description="Who changed surveys, exports, and roster data. Coming soon."
-    />
+    <div className="w-full">
+      <AuditLogPanel events={events} dbError={dbError} />
+    </div>
   );
 }

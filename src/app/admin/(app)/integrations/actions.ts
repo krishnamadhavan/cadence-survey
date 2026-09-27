@@ -9,7 +9,7 @@ import {
   createApiKey,
   revokeApiKey,
 } from "@/db/api-keys";
-import { hasAdminSession } from "@/lib/admin";
+import { getAdminSessionUser } from "@/lib/admin";
 
 export type IntegrationActionState = {
   ok: boolean;
@@ -23,20 +23,26 @@ function fail(error: string): IntegrationActionState {
   return { ok: false, error, secret: null };
 }
 
-async function requireSession() {
-  if (!(await hasAdminSession())) {
+async function requireActor() {
+  const actor = await getAdminSessionUser();
+  if (!actor) {
     redirect("/admin/login?next=/admin/integrations");
   }
+  return actor;
 }
 
 export async function createApiKeyAction(
   _prev: IntegrationActionState,
   formData: FormData,
 ): Promise<IntegrationActionState> {
-  await requireSession();
+  const actor = await requireActor();
   try {
-    const created = await createApiKey(String(formData.get("name") ?? ""));
+    const created = await createApiKey(String(formData.get("name") ?? ""), {
+      actorId: actor.id,
+      actorEmail: actor.email,
+    });
     revalidatePath("/admin/integrations");
+    revalidatePath("/admin/audit-log");
     return { ok: true, error: null, secret: created.secret };
   } catch (error) {
     if (error instanceof ApiKeyValidationError) {
@@ -50,14 +56,18 @@ export async function revokeApiKeyAction(
   _prev: IntegrationActionState,
   formData: FormData,
 ): Promise<IntegrationActionState> {
-  await requireSession();
+  const actor = await requireActor();
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
   if (!id.success) {
     return fail("That key is not valid.");
   }
   try {
-    await revokeApiKey(id.data);
+    await revokeApiKey(id.data, {
+      actorId: actor.id,
+      actorEmail: actor.email,
+    });
     revalidatePath("/admin/integrations");
+    revalidatePath("/admin/audit-log");
     return { ok: true, error: null, secret: null };
   } catch (error) {
     if (error instanceof ApiKeyNotFoundError || error instanceof ApiKeyValidationError) {

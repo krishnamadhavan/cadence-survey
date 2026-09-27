@@ -9,7 +9,9 @@ import {
   AdminValidationError,
   createAdmin,
   deleteAdmin,
+  listAdmins,
 } from "@/db/admins";
+import { recordAudit } from "@/db/audit-log";
 import { getAdminSessionUser } from "@/lib/admin";
 
 export type UserActionState = {
@@ -35,13 +37,20 @@ export async function createAdminAction(
   _prev: UserActionState,
   formData: FormData,
 ): Promise<UserActionState> {
-  await requireActor();
+  const actor = await requireActor();
   try {
-    await createAdmin({
+    const created = await createAdmin({
       email: String(formData.get("email") ?? ""),
       password: String(formData.get("password") ?? ""),
     });
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "admin.added",
+      summary: `Added admin ${created.email}`,
+    });
     revalidatePath("/admin/users");
+    revalidatePath("/admin/audit-log");
     return { ok: true, error: null };
   } catch (error) {
     if (
@@ -64,8 +73,16 @@ export async function deleteAdminAction(
     return fail("That admin is not valid.");
   }
   try {
+    const existing = (await listAdmins()).find((account) => account.id === id.data);
     await deleteAdmin({ id: id.data, actorId: actor.id });
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "admin.removed",
+      summary: `Removed admin ${existing?.email ?? id.data}`,
+    });
     revalidatePath("/admin/users");
+    revalidatePath("/admin/audit-log");
     return { ok: true, error: null };
   } catch (error) {
     if (
