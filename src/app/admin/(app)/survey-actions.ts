@@ -8,6 +8,7 @@ import {
   deleteSurveyQuestion,
   moveSurveyQuestion,
   renameSurvey,
+  duplicateSurvey,
   setSurveyStatus,
   SurveyNotFoundError,
   SurveyQuestionNotFoundError,
@@ -194,6 +195,42 @@ function actionError(error: unknown, fallback: string) {
     return error.message;
   }
   return fallback;
+}
+
+export async function duplicateSurveyAction(
+  _prev: SurveyActionState,
+  formData: FormData,
+): Promise<SurveyActionState> {
+  if (!(await hasAdminSession())) {
+    redirect("/admin/login?next=/admin");
+  }
+  const id = z.string().uuid().safeParse(String(formData.get("id") ?? ""));
+  if (!id.success) {
+    return fail("That pulse is not valid.");
+  }
+  try {
+    const created = await duplicateSurvey(id.data);
+    revalidatePath("/admin");
+    revalidatePath(`/admin/s/${created.publicToken}`);
+    redirect(`/admin/s/${created.publicToken}`);
+  } catch (error) {
+    if (error instanceof SurveyNotFoundError || error instanceof SurveyValidationError) {
+      return fail(error.message);
+    }
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    return fail("Could not duplicate that pulse. Is Postgres running?");
+  }
+}
+
+function isRedirectError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    String((error as { digest: unknown }).digest).startsWith("NEXT_REDIRECT")
+  );
 }
 
 function revalidateSurveyPaths(token: string) {

@@ -9,6 +9,7 @@ import {
   formatSurveyStatus,
 } from "@/lib/survey-status";
 import {
+  duplicateSurveyAction,
   setSurveyStatusAction,
   type SurveyActionState,
 } from "./survey-actions";
@@ -97,7 +98,7 @@ export function SurveysPanel({ surveys, dbError }: SurveysPanelProps) {
       <div className="min-w-0">
         <h1 className="font-serif text-4xl text-ink">Surveys</h1>
         <p className="mt-2 text-ink/60">
-          Open a draft to collect answers, or close a live pulse when you are
+          Duplicate a pulse into a new draft, open it to collect answers, or close a live pulse when you are
           done.
         </p>
       </div>
@@ -213,7 +214,10 @@ export function SurveysPanel({ surveys, dbError }: SurveysPanelProps) {
                         {formatDate(survey.createdAt)}
                       </td>
                       <td className="px-4 py-3">
-                        <SurveyStatusButton survey={survey} />
+                        <div className="flex items-start justify-end gap-1">
+                          <DuplicateButton surveyId={survey.id} />
+                          <SurveyStatusButton survey={survey} />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -291,6 +295,28 @@ export function SurveysPanel({ surveys, dbError }: SurveysPanelProps) {
         )}
       </section>
     </>
+  );
+}
+
+function DuplicateButton({ surveyId }: { surveyId: string }) {
+  const [state, action, pending] = useActionState<SurveyActionState, FormData>(
+    duplicateSurveyAction,
+    null,
+  );
+  return (
+    <form action={action} className="flex flex-col items-end">
+      <input type="hidden" name="id" value={surveyId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-35"
+      >
+        {pending ? "Copying…" : "Duplicate"}
+      </button>
+      {state?.error ? (
+        <p className="max-w-40 pt-1 text-right text-xs text-rose-800">{state.error}</p>
+      ) : null}
+    </form>
   );
 }
 
