@@ -43,6 +43,13 @@
       "when": 1790452682398,
       "tag": "0005_action_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790488737015,
+      "tag": "0006_team_managers",
+      "breakpoints": true
     }
   ]
 }
