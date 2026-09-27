@@ -14,7 +14,15 @@ const emailOther = `org-other-${stamp}@cadence.test`;
 test("groups each manager with the team they run and the people on it", async (t) => {
   const teamIds: string[] = [];
   t.after(async () => {
-    await db.delete(employees).where(inArray(employees.email, [emailLead, emailReport, emailOther]));
+    await db.delete(employees).where(
+      inArray(employees.email, [
+        emailLead,
+        emailReport,
+        emailOther,
+        `a-twin-${stamp}@cadence.test`,
+        `z-twin-${stamp}@cadence.test`,
+      ]),
+    );
     if (teamIds.length > 0) {
       await db.delete(teams).where(inArray(teams.id, teamIds));
     }
@@ -26,6 +34,8 @@ test("groups each manager with the team they run and the people on it", async (t
   teamIds.push(design, ops);
   const lead = await insertPerson("Casey Lead", emailLead, design);
   const report = await insertPerson("Devon Report", emailReport, design);
+  const twinLater = await insertPerson("Devon Report", `z-twin-${stamp}@cadence.test`, design);
+  const twinEarlier = await insertPerson("Devon Report", `a-twin-${stamp}@cadence.test`, design);
   await insertPerson("Eden Other", emailOther, ops);
   await db.insert(teamManagers).values({ teamId: design, employeeId: lead });
 
@@ -39,7 +49,7 @@ test("groups each manager with the team they run and the people on it", async (t
   );
   assert.deepEqual(
     casey?.teams[0]?.people.map((person) => person.id),
-    [report],
+    [twinEarlier, report, twinLater],
   );
 
   const open = chart.find((group) => group.managerId === null);

@@ -39,7 +39,7 @@ export async function getOrgChart(): Promise<OrgGroup[]> {
     .leftJoin(teamManagers, eq(teamManagers.teamId, teams.id))
     .leftJoin(manager, eq(manager.id, teamManagers.employeeId))
     .leftJoin(employees, eq(employees.teamId, teams.id))
-    .orderBy(asc(teams.name), asc(employees.name));
+    .orderBy(asc(teams.name), asc(employees.name), asc(employees.email));
 
   const groups = new Map<string, OrgGroup>();
   for (const row of rows) {
