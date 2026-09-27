@@ -1,10 +1,27 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import { listAdmins } from "@/db/admins";
+import { getAdminSessionUser } from "@/lib/admin";
+import { UsersPanel } from "./users-panel";
 
-export default function AdminUsersPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminUsersPage() {
+  const actor = await getAdminSessionUser();
+  let accounts: Awaited<ReturnType<typeof listAdmins>> = [];
+  let dbError = false;
+
+  try {
+    accounts = await listAdmins();
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Users"
-      description="Invite additional admins and manage access. Coming soon."
-    />
+    <div className="w-full">
+      <UsersPanel
+        accounts={accounts}
+        currentId={actor?.id ?? null}
+        dbError={dbError}
+      />
+    </div>
   );
 }
