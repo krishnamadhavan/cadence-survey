@@ -19,14 +19,17 @@ export type AuditEvent = {
   createdAt: string;
 };
 
-export async function recordAudit(input: {
-  actorId: string | null;
-  actorEmail: string;
-  action: AuditAction;
-  summary: string;
-  createdAt?: Date;
-}): Promise<void> {
-  await db.insert(auditEvents).values({
+export async function recordAudit(
+  input: {
+    actorId: string | null;
+    actorEmail: string;
+    action: AuditAction;
+    summary: string;
+    createdAt?: Date;
+  },
+  tx: Pick<typeof db, "insert"> = db,
+): Promise<void> {
+  await tx.insert(auditEvents).values({
     actorId: input.actorId,
     actorEmail: input.actorEmail,
     action: input.action,

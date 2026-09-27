@@ -3,12 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { recordAudit } from "@/db/audit-log";
 import {
   ApiKeyNotFoundError,
   ApiKeyValidationError,
   createApiKey,
-  listApiKeys,
   revokeApiKey,
 } from "@/db/api-keys";
 import { getAdminSessionUser } from "@/lib/admin";
@@ -39,12 +37,9 @@ export async function createApiKeyAction(
 ): Promise<IntegrationActionState> {
   const actor = await requireActor();
   try {
-    const created = await createApiKey(String(formData.get("name") ?? ""));
-    await recordAudit({
+    const created = await createApiKey(String(formData.get("name") ?? ""), {
       actorId: actor.id,
       actorEmail: actor.email,
-      action: "api_key.created",
-      summary: `Created API key ${created.name}`,
     });
     revalidatePath("/admin/integrations");
     revalidatePath("/admin/audit-log");
@@ -67,13 +62,9 @@ export async function revokeApiKeyAction(
     return fail("That key is not valid.");
   }
   try {
-    const existing = (await listApiKeys()).find((key) => key.id === id.data);
-    await revokeApiKey(id.data);
-    await recordAudit({
+    await revokeApiKey(id.data, {
       actorId: actor.id,
       actorEmail: actor.email,
-      action: "api_key.revoked",
-      summary: `Revoked API key ${existing?.name ?? id.data}`,
     });
     revalidatePath("/admin/integrations");
     revalidatePath("/admin/audit-log");
