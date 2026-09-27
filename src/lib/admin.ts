@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { findActiveApiKey } from "@/db/api-keys";
 import { db } from "@/db/client";
 import { admins } from "@/db/schema";
 import { resolveSessionUser } from "@/lib/admin-user";
@@ -54,7 +55,10 @@ export async function hasAdminSession(): Promise<boolean> {
 
 export async function isAdminRequest(request: Request): Promise<boolean> {
   const bearer = readBearerToken(request.headers.get("authorization"));
-  if (await readAdminSession(bearer)) {
+  if (bearer && (await readAdminSession(bearer))) {
+    return true;
+  }
+  if (bearer && (await findActiveApiKey(bearer))) {
     return true;
   }
   return hasAdminSession();

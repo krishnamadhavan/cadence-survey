@@ -50,6 +50,13 @@
       "when": 1790488737015,
       "tag": "0006_team_managers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790497793409,
+      "tag": "0007_api_keys",
+      "breakpoints": true
     }
   ]
 }

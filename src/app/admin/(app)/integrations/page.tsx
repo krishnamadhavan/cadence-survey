@@ -1,10 +1,21 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import { listApiKeys } from "@/db/api-keys";
+import { IntegrationsPanel } from "./integrations-panel";
 
-export default function AdminIntegrationsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminIntegrationsPage() {
+  let keys: Awaited<ReturnType<typeof listApiKeys>> = [];
+  let dbError = false;
+
+  try {
+    keys = await listApiKeys();
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Integrations"
-      description="Connect Slack, HRIS, and other tools. Coming soon."
-    />
+    <div className="w-full">
+      <IntegrationsPanel keys={keys} dbError={dbError} />
+    </div>
   );
 }
