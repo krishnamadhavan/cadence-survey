@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { admins } from "@/db/schema";
 import { normalizeEmail } from "@/lib/email";
 import { hashAdminPassword } from "@/lib/password";
+import { destroySessionsForAdmin } from "@/lib/session";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_MIN = 8;
@@ -100,6 +101,11 @@ export async function deleteAdmin(input: {
     }
     await tx.delete(admins).where(eq(admins.id, input.id));
   });
+  try {
+    await destroySessionsForAdmin(input.id);
+  } catch {
+    // The account row is already gone, so a later request cannot stay signed in.
+  }
 }
 
 export function adminDeletionBlock(

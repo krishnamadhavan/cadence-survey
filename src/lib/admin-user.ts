@@ -6,10 +6,10 @@ export type SessionUser = {
 export async function resolveSessionUser(
   adminId: string,
   lookup: () => Promise<SessionUser | undefined>,
-): Promise<SessionUser> {
+): Promise<SessionUser | null> {
   try {
     const admin = await lookup();
-    return admin ?? { id: adminId, email: "Admin" };
+    return admin ?? null;
   } catch {
     return { id: adminId, email: "Admin" };
   }

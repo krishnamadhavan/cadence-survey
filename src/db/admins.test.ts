@@ -14,6 +14,7 @@ import {
 import { db, pg } from "@/db/client";
 import { admins } from "@/db/schema";
 import { verifyAdminCredentials } from "@/lib/auth";
+import { redis } from "@/lib/redis";
 
 const stamp = Date.now();
 const emailA = `admin-a-${stamp}@cadence.test`;
@@ -24,6 +25,7 @@ test("create, list, and remove admins without dropping the last account", async 
   t.after(async () => {
     await db.delete(admins).where(inArray(admins.email, emails));
     await pg.end({ timeout: 2 });
+    await redis.quit();
   });
 
   const created = await createAdmin({
