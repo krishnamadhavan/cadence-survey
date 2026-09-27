@@ -1,10 +1,26 @@
-import { PlaceholderPage } from "@/components/admin/placeholder-page";
+import { listEmployees } from "@/db/employees";
+import { listManagerAssignments } from "@/db/managers";
+import { ManagersPanel } from "./managers-panel";
 
-export default function AdminManagersPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminManagersPage() {
+  let assignments: Awaited<ReturnType<typeof listManagerAssignments>> = [];
+  let people: Awaited<ReturnType<typeof listEmployees>> = [];
+  let dbError = false;
+
+  try {
+    [assignments, people] = await Promise.all([
+      listManagerAssignments(),
+      listEmployees(),
+    ]);
+  } catch {
+    dbError = true;
+  }
+
   return (
-    <PlaceholderPage
-      title="Managers"
-      description="People who lead teams and see their pulse results. Coming soon."
-    />
+    <div className="w-full">
+      <ManagersPanel assignments={assignments} people={people} dbError={dbError} />
+    </div>
   );
 }

@@ -68,6 +68,22 @@ export const employees = pgTable(
   (table) => [index("employees_team_id_idx").on(table.teamId)],
 );
 
+export const teamManagers = pgTable(
+  "team_managers",
+  {
+    teamId: uuid("team_id")
+      .primaryKey()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("team_managers_employee_id_idx").on(table.employeeId)],
+);
+
 export const surveys = pgTable("surveys", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull(),
