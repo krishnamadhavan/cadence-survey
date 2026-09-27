@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { recordAudit } from "@/db/audit-log";
 import {
   ManagerNotFoundError,
   ManagerValidationError,
   assignManager,
+  listManagerAssignments,
   unassignManager,
 } from "@/db/managers";
-import { hasAdminSession } from "@/lib/admin";
+import { getAdminSessionUser } from "@/lib/admin";
 
 export type ManagerActionState = {
   ok: boolean;
@@ -31,7 +33,8 @@ export async function assignManagerAction(
   _prev: ManagerActionState,
   formData: FormData,
 ): Promise<ManagerActionState> {
-  if (!(await hasAdminSession())) {
+  const actor = await getAdminSessionUser();
+  if (!actor) {
     redirect("/admin/login?next=/admin/managers");
   }
   const teamId = idSchema.safeParse(String(formData.get("teamId") ?? ""));
@@ -41,7 +44,17 @@ export async function assignManagerAction(
   }
   try {
     await assignManager({ teamId: teamId.data, employeeId: employeeId.data });
+    const assigned = (await listManagerAssignments()).find(
+      (row) => row.teamId === teamId.data,
+    );
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "manager.assigned",
+      summary: `Assigned ${assigned?.employeeName ?? "a person"} as manager of ${assigned?.teamName ?? "a team"}`,
+    });
     revalidateManagerPages();
+    revalidatePath("/admin/audit-log");
     return { ok: true, error: null };
   } catch (error) {
     if (error instanceof ManagerNotFoundError || error instanceof ManagerValidationError) {
@@ -55,7 +68,8 @@ export async function unassignManagerAction(
   _prev: ManagerActionState,
   formData: FormData,
 ): Promise<ManagerActionState> {
-  if (!(await hasAdminSession())) {
+  const actor = await getAdminSessionUser();
+  if (!actor) {
     redirect("/admin/login?next=/admin/managers");
   }
   const teamId = idSchema.safeParse(String(formData.get("teamId") ?? ""));
@@ -63,8 +77,18 @@ export async function unassignManagerAction(
     return fail("That team is not valid.");
   }
   try {
+    const current = (await listManagerAssignments()).find(
+      (row) => row.teamId === teamId.data,
+    );
     await unassignManager(teamId.data);
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "manager.unassigned",
+      summary: `Unassigned ${current?.employeeName ?? "the manager"} from ${current?.teamName ?? "a team"}`,
+    });
     revalidateManagerPages();
+    revalidatePath("/admin/audit-log");
     return { ok: true, error: null };
   } catch (error) {
     if (error instanceof ManagerNotFoundError || error instanceof ManagerValidationError) {

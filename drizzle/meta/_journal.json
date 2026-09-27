@@ -64,6 +64,13 @@
       "when": 1790529289007,
       "tag": "0008_api_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790529899148,
+      "tag": "0009_audit_events",
+      "breakpoints": true
     }
   ]
 }
