@@ -4,7 +4,7 @@ import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
 import { listSurveyQuestions } from "@/db/surveys";
 import type { SurveyStatus } from "@/db/schema";
-import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
+import { getAnonymityFloor } from "@/db/settings";
 import { formatSurveyStatus } from "@/lib/survey-status";
 import { ExportButtons } from "./export-buttons";
 import { SurveyDraftEditor } from "./survey-editor";
@@ -40,6 +40,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   }
 
   const status = results.survey.status as SurveyStatus;
+  const anonymityFloor = await getAnonymityFloor();
   const draftQuestions =
     status === "draft" ? await listSurveyQuestions(results.survey.publicToken) : [];
   const struggling = results.teams.filter(
@@ -111,7 +112,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
         </h2>
         <p className="mt-1 text-sm text-ink/55">
           Sorted worst first. Low is under 3.0, watch is under 3.5. Teams with
-          fewer than {MIN_TEAM_RESPONSES} responses are hidden so one person
+          fewer than {anonymityFloor} responses are hidden so one person
           cannot be identified.
         </p>
         {results.teams.length === 0 ? (

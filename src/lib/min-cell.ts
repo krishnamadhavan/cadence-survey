@@ -18,10 +18,15 @@ export type TeamPublishPlan = {
  */
 export function planTeamPublish(
   teams: { key: string; count: number }[],
+  minResponses: number = MIN_TEAM_RESPONSES,
 ): TeamPublishPlan {
+  const minimum =
+    Number.isInteger(minResponses) && minResponses >= MIN_TEAM_RESPONSES
+      ? minResponses
+      : MIN_TEAM_RESPONSES;
   const withData = teams.filter((team) => team.count > 0);
-  const named = withData.filter((team) => team.count >= MIN_TEAM_RESPONSES);
-  const suppressed = withData.filter((team) => team.count < MIN_TEAM_RESPONSES);
+  const named = withData.filter((team) => team.count >= minimum);
+  const suppressed = withData.filter((team) => team.count < minimum);
 
   let suppressedCount = suppressed.reduce((sum, team) => sum + team.count, 0);
 
@@ -29,7 +34,7 @@ export function planTeamPublish(
 
   while (
     suppressedCount > 0 &&
-    suppressedCount < MIN_TEAM_RESPONSES &&
+    suppressedCount < minimum &&
     named.length > 0
   ) {
     const next = named.shift();
@@ -40,7 +45,7 @@ export function planTeamPublish(
     suppressedCount += next.count;
   }
 
-  if (suppressedCount > 0 && suppressedCount < MIN_TEAM_RESPONSES) {
+  if (suppressedCount > 0 && suppressedCount < minimum) {
     return {
       namedKeys: [],
       suppressedKeys: suppressed.map((team) => team.key),
@@ -51,7 +56,7 @@ export function planTeamPublish(
   return {
     namedKeys: named.map((team) => team.key),
     suppressedKeys: suppressed.map((team) => team.key),
-    showSuppressedBucket: suppressedCount >= MIN_TEAM_RESPONSES,
+    showSuppressedBucket: suppressedCount >= minimum,
   };
 }
 

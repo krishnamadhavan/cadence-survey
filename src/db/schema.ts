@@ -37,6 +37,11 @@ export type AnswerValue = {
   value: string | number;
 };
 
+export const workspaceSettings = pgTable("workspace_settings", {
+  id: text("id").primaryKey().default("default"),
+  anonymityFloor: integer("anonymity_floor").notNull().default(3),
+});
+
 export const admins = pgTable("admins", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
