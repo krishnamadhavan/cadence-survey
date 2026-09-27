@@ -44,9 +44,9 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     label: "People",
     items: [
       { href: "/admin/employees", label: "Employees" },
-      { href: "/admin/managers", label: "Managers" },
       { href: "/admin/teams", label: "Teams" },
       { href: "/admin/org-chart", label: "Org Chart" },
+      { href: "/admin/managers", label: "Managers" },
     ],
   },
   {
