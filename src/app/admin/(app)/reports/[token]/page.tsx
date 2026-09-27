@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExportButtons } from "@/app/admin/(app)/s/[token]/export-buttons";
 import { getSurveyReportDetail } from "@/db/reports";
+import { getAnonymityFloor } from "@/db/settings";
 import {
-  MIN_TEAM_RESPONSES,
   SUPPRESSED_TEAM_NAME,
   type QuestionResults,
   type TeamHealth,
@@ -43,6 +43,7 @@ export default async function ReportDetailPage({
 
   const { selected, previous, results, previousResults, employeeCount } =
     detail;
+  const anonymityFloor = await getAnonymityFloor();
   const participation =
     employeeCount > 0
       ? Math.min(
@@ -370,7 +371,7 @@ export default async function ReportDetailPage({
           By team
         </h2>
         <p className="mt-1 text-sm text-ink/55">
-          Sorted worst first. Teams with fewer than {MIN_TEAM_RESPONSES}{" "}
+          Sorted worst first. Teams with fewer than {anonymityFloor}{" "}
           responses are hidden so one person cannot be identified.
         </p>
         {namedTeams.length === 0 ? (

@@ -47,3 +47,16 @@ test("shows no team names when everyone is below the minimum", () => {
   assert.equal(plan.showSuppressedBucket, false);
   assert.equal(MIN_TEAM_RESPONSES, 3);
 });
+
+test("uses a higher floor and still folds a leftover that is too small", () => {
+  const plan = planTeamPublish(
+    [
+      { key: "eng", count: 5 },
+      { key: "ops", count: 6 },
+      { key: "design", count: 4 },
+    ],
+    5,
+  );
+  assert.deepEqual(plan.namedKeys, ["ops"]);
+  assert.deepEqual(plan.suppressedKeys.sort(), ["design", "eng"]);
+});

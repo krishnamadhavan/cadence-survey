@@ -1,0 +1,39 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { setAnonymityFloor, SettingsValidationError } from "@/db/settings";
+import { hasAdminSession } from "@/lib/admin";
+
+export type SettingsActionState = {
+  ok: boolean;
+  error: string | null;
+} | null;
+
+function fail(error: string): SettingsActionState {
+  return { ok: false, error };
+}
+
+export async function setAnonymityFloorAction(
+  _prev: SettingsActionState,
+  formData: FormData,
+): Promise<SettingsActionState> {
+  if (!(await hasAdminSession())) {
+    redirect("/admin/login?next=/admin/settings");
+  }
+  const raw = String(formData.get("anonymityFloor") ?? "").trim();
+  const value = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isInteger(value)) {
+    return fail("The anonymity floor must be a whole number from 2 to 50.");
+  }
+  try {
+    await setAnonymityFloor(value);
+    revalidatePath("/admin", "layout");
+    return { ok: true, error: null };
+  } catch (error) {
+    if (error instanceof SettingsValidationError) {
+      return fail(error.message);
+    }
+    return fail("Could not save settings. Is Postgres running?");
+  }
+}
