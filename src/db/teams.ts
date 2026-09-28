@@ -183,7 +183,16 @@ export async function mergeTeams(input: {
           )
           .limit(1);
         if (clash) {
-          await tx.delete(actionPlans).where(eq(actionPlans.id, plan.id));
+          await tx
+            .update(actionPlans)
+            .set({
+              teamId: target.id,
+              teamKey: target.id,
+              teamName: target.name,
+              status: "done",
+              completedAt: new Date(),
+            })
+            .where(eq(actionPlans.id, plan.id));
           continue;
         }
       }

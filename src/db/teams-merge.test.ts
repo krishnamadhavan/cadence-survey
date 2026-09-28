@@ -19,12 +19,14 @@ import { TeamValidationError, mergeTeams } from "@/db/teams";
 
 const stamp = Date.now();
 const emails = [`merge-a-${stamp}@cadence.test`, `merge-b-${stamp}@cadence.test`];
+const actorEmail = `merger-${stamp}@cadence.test`;
 
 test("folds one team into another, moves its people and responses, and removes it", async (t) => {
   const teamIds: string[] = [];
   const surveyIds: string[] = [];
   t.after(async () => {
-    await db.delete(auditEvents).where(eq(auditEvents.actorEmail, `merger-${stamp}@cadence.test`));
+    await db.delete(auditEvents).where(eq(auditEvents.actorEmail, actorEmail));
+    await db.delete(admins).where(eq(admins.email, actorEmail));
     await db.delete(employees).where(inArray(employees.email, emails));
     if (surveyIds.length > 0) {
       await db.delete(surveys).where(inArray(surveys.id, surveyIds));
@@ -90,12 +92,15 @@ test("folds one team into another, moves its people and responses, and removes i
     status: "open",
   });
 
-  const [admin] = await db.select({ id: admins.id }).from(admins).limit(1);
+  const [admin] = await db
+    .insert(admins)
+    .values({ email: actorEmail, passwordHash: "test-only-hash" })
+    .returning({ id: admins.id });
   assert.ok(admin);
   const result = await mergeTeams({
     sourceId: source,
     targetId: target,
-    actor: { id: admin.id, email: `merger-${stamp}@cadence.test` },
+    actor: { id: admin.id, email: actorEmail },
   });
   assert.equal(result.moved, 2);
 
@@ -113,12 +118,22 @@ test("folds one team into another, moves its people and responses, and removes i
   assert.equal(keptResponse?.teamId, target);
 
   const plans = await db
-    .select({ teamId: actionPlans.teamId, followUp: actionPlans.followUp })
+    .select({
+      teamId: actionPlans.teamId,
+      followUp: actionPlans.followUp,
+      status: actionPlans.status,
+      completedAt: actionPlans.completedAt,
+    })
     .from(actionPlans)
     .where(eq(actionPlans.surveyId, survey.id));
-  assert.equal(plans.length, 1);
-  assert.equal(plans[0]?.teamId, target);
-  assert.equal(plans[0]?.followUp, "Check in.");
+  const keptOpen = plans.find((plan) => plan.followUp === "Check in.");
+  const keptSource = plans.find((plan) => plan.followUp === "Meet this week.");
+  assert.equal(plans.length, 2);
+  assert.equal(keptOpen?.status, "open");
+  assert.equal(keptOpen?.teamId, target);
+  assert.equal(keptSource?.status, "done");
+  assert.equal(keptSource?.teamId, target);
+  assert.ok(keptSource?.completedAt);
 
   const leftover = await db
     .select({ id: teams.id })
