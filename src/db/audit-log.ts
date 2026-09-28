@@ -9,7 +9,8 @@ export type AuditAction =
   | "manager.unassigned"
   | "api_key.created"
   | "api_key.revoked"
-  | "anonymity_floor.changed";
+  | "anonymity_floor.changed"
+  | "employees.reassigned";
 
 export type AuditEvent = {
   id: string;

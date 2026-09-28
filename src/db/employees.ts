@@ -1,4 +1,5 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
+import { recordAudit } from "@/db/audit-log";
 import { db } from "@/db/client";
 import { employees, teams } from "@/db/schema";
 import {
@@ -20,6 +21,58 @@ export type EmployeeImportResult = {
   updated: number;
   errors: EmployeeCsvError[];
 };
+
+export class EmployeeMoveError extends Error {}
+
+const MOVE_LIMIT = 500;
+
+export async function reassignEmployees(input: {
+  employeeIds: string[];
+  teamId: string;
+  actor?: { id: string; email: string };
+}): Promise<{ moved: number; teamName: string }> {
+  const ids = [...new Set(input.employeeIds)];
+  if (ids.length === 0) {
+    throw new EmployeeMoveError("Select at least one person.");
+  }
+  if (ids.length > MOVE_LIMIT) {
+    throw new EmployeeMoveError(`Move at most ${MOVE_LIMIT} people at once.`);
+  }
+
+  return db.transaction(async (tx) => {
+    const [team] = await tx
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(eq(teams.id, input.teamId))
+      .limit(1);
+    if (!team) {
+      throw new EmployeeMoveError("That team is gone.");
+    }
+    const found = await tx
+      .select({ id: employees.id })
+      .from(employees)
+      .where(inArray(employees.id, ids));
+    if (found.length !== ids.length) {
+      throw new EmployeeMoveError("Some of those people are gone. Refresh and try again.");
+    }
+    await tx
+      .update(employees)
+      .set({ teamId: team.id })
+      .where(inArray(employees.id, ids));
+    if (input.actor) {
+      await recordAudit(
+        {
+          actorId: input.actor.id,
+          actorEmail: input.actor.email,
+          action: "employees.reassigned",
+          summary: `Moved ${ids.length} ${ids.length === 1 ? "person" : "people"} to ${team.name}`,
+        },
+        tx,
+      );
+    }
+    return { moved: ids.length, teamName: team.name };
+  });
+}
 
 const INSERT_CHUNK = 500;
 

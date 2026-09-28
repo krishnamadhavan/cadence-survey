@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { EmployeeListItem } from "@/db/employees";
+import { reassignEmployeesAction, type MoveState } from "./actions";
 import { UploadForm } from "./upload-form";
 
 type TeamOption = {
@@ -49,7 +50,18 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pageSizeDraft, setPageSizeDraft] = useState(String(DEFAULT_PAGE_SIZE));
   const [importOpen, setImportOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
   const importButtonRef = useRef<HTMLButtonElement>(null);
+  const [moveState, moveAction, movePending] = useActionState<MoveState, FormData>(
+    reassignEmployeesAction,
+    null,
+  );
+
+  useEffect(() => {
+    if (moveState?.ok) {
+      setSelected([]);
+    }
+  }, [moveState]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -99,7 +111,8 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
         <div className="min-w-0">
           <h1 className="font-serif text-4xl text-ink">Employees</h1>
           <p className="mt-2 text-ink/60">
-            Search the roster, filter by team, or import a CSV.
+            Search the roster, filter by team, import a CSV, or move several
+            people to another team.
           </p>
         </div>
         <button
@@ -175,6 +188,23 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
         ) : null}
       </div>
 
+      {moveState?.ok ? (
+        <p className="mt-4 text-sm text-ink/60">
+          Moved {moveState.moved} {moveState.moved === 1 ? "person" : "people"} to{" "}
+          {moveState.teamName}.
+        </p>
+      ) : null}
+      {selected.length > 0 ? (
+        <MoveBar
+          selected={selected}
+          teams={teams}
+          action={moveAction}
+          pending={movePending}
+          error={moveState?.ok ? null : moveState?.error ?? null}
+          onClear={() => setSelected([])}
+        />
+      ) : null}
+
       <section className="mt-4">
         {dbError ? (
           <p className="mt-4 text-ink/70">Could not reach Postgres.</p>
@@ -188,6 +218,24 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
               <table className="w-full min-w-[28rem] text-left text-sm">
                 <thead className="border-b border-ink/10 text-ink/45">
                   <tr>
+                    <th className="w-10 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label="Select everyone on this page"
+                        checked={
+                          pageRows.length > 0 &&
+                          pageRows.every((person) => selected.includes(person.id))
+                        }
+                        onChange={(event) => {
+                          const pageIds = pageRows.map((person) => person.id);
+                          setSelected((current) =>
+                            event.target.checked
+                              ? [...new Set([...current, ...pageIds])]
+                              : current.filter((id) => !pageIds.includes(id)),
+                          );
+                        }}
+                      />
+                    </th>
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">Team</th>
@@ -196,6 +244,20 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                 <tbody>
                   {pageRows.map((person) => (
                     <tr key={person.id} className="border-t border-ink/5">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${person.name}`}
+                          checked={selected.includes(person.id)}
+                          onChange={(event) => {
+                            setSelected((current) =>
+                              event.target.checked
+                                ? [...current, person.id]
+                                : current.filter((id) => id !== person.id),
+                            );
+                          }}
+                        />
+                      </td>
                       <td className="px-4 py-3 font-medium text-ink">
                         {person.name}
                       </td>
@@ -432,6 +494,69 @@ function trapTab(event: KeyboardEvent, root: HTMLElement | null) {
     event.preventDefault();
     first.focus();
   }
+}
+
+function MoveBar({
+  selected,
+  teams,
+  action,
+  pending,
+  error,
+  onClear,
+}: {
+  selected: string[];
+  teams: TeamOption[];
+  action: (formData: FormData) => void;
+  pending: boolean;
+  error: string | null;
+  onClear: () => void;
+}) {
+  return (
+    <form
+      action={action}
+      className="mt-4 flex flex-col gap-3 rounded-2xl border border-ink/10 bg-white/70 p-4 sm:flex-row sm:items-center"
+    >
+      {selected.map((id) => (
+        <input key={id} type="hidden" name="employeeId" value={id} />
+      ))}
+      <p className="text-sm text-ink">
+        {selected.length} {selected.length === 1 ? "person" : "people"} selected
+      </p>
+      <label className="flex items-center gap-2 text-sm text-ink/60">
+        Move to
+        <select
+          name="teamId"
+          required
+          defaultValue=""
+          className="h-9 rounded-full border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30"
+        >
+          <option value="" disabled>
+            Choose a team
+          </option>
+          {teams.map((team) => (
+            <option key={team.id} value={team.id}>
+              {team.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="submit"
+        disabled={pending || teams.length === 0}
+        className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-sm font-medium text-paper disabled:opacity-50"
+      >
+        {pending ? "Moving…" : "Move"}
+      </button>
+      <button
+        type="button"
+        className="h-9 rounded-full px-3 text-sm text-ink/50 hover:bg-ink/5 hover:text-ink"
+        onClick={onClear}
+      >
+        Clear
+      </button>
+      {error ? <p className="text-sm text-rose-800 sm:basis-full">{error}</p> : null}
+    </form>
+  );
 }
 
 function SearchIcon() {
