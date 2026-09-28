@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, exists, gt, lt } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
@@ -122,6 +123,73 @@ async function countQuestions(
     .where(eq(questions.surveyId, surveyId))
     .limit(1);
   return countRow ? 1 : 0;
+}
+
+export async function duplicateSurvey(id: string): Promise<{
+  id: string;
+  publicToken: string;
+  title: string;
+}> {
+  return db.transaction(async (tx) => {
+    const [source] = await tx
+      .select({
+        id: surveys.id,
+        title: surveys.title,
+        description: surveys.description,
+      })
+      .from(surveys)
+      .where(eq(surveys.id, id))
+      .limit(1);
+    if (!source) {
+      throw new SurveyNotFoundError("That pulse is gone.");
+    }
+    const copiedQuestions = await tx
+      .select({
+        prompt: questions.prompt,
+        type: questions.type,
+        options: questions.options,
+        position: questions.position,
+        required: questions.required,
+      })
+      .from(questions)
+      .where(eq(questions.surveyId, source.id))
+      .orderBy(asc(questions.position));
+
+    const [created] = await tx
+      .insert(surveys)
+      .values({
+        title: copyTitle(source.title),
+        description: source.description,
+        publicToken: randomBytes(16).toString("hex"),
+        status: "draft",
+      })
+      .returning({
+        id: surveys.id,
+        publicToken: surveys.publicToken,
+        title: surveys.title,
+      });
+    if (!created) {
+      throw new SurveyValidationError("Could not duplicate that pulse.");
+    }
+    if (copiedQuestions.length > 0) {
+      await tx.insert(questions).values(
+        copiedQuestions.map((question) => ({
+          surveyId: created.id,
+          prompt: question.prompt,
+          type: question.type,
+          options: question.options,
+          position: question.position,
+          required: question.required,
+        })),
+      );
+    }
+    return created;
+  });
+}
+
+function copyTitle(title: string) {
+  const prefix = "Copy of ";
+  return `${prefix}${title}`.slice(0, 80).trim();
 }
 
 export async function listSurveyQuestions(
