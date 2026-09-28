@@ -9,6 +9,7 @@ import {
   moveSurveyQuestion,
   renameSurvey,
   duplicateSurvey,
+  setSurveySchedule,
   setSurveyStatus,
   SurveyNotFoundError,
   SurveyQuestionNotFoundError,
@@ -17,6 +18,7 @@ import {
   updateSurveyQuestion,
 } from "@/db/surveys";
 import { hasAdminSession } from "@/lib/admin";
+import { parseSurveyCadence } from "@/lib/survey-cadence";
 import { parseRequired } from "@/lib/template-question";
 import type { SurveyStatus } from "@/db/schema";
 
@@ -231,6 +233,35 @@ function isRedirectError(error: unknown) {
     "digest" in error &&
     String((error as { digest: unknown }).digest).startsWith("NEXT_REDIRECT")
   );
+}
+
+export async function setSurveyScheduleAction(
+  _prev: SurveyActionState,
+  formData: FormData,
+): Promise<SurveyActionState> {
+  if (!(await hasAdminSession())) {
+    redirect("/admin/login?next=/admin");
+  }
+  const token = readToken(formData);
+  if (!token) {
+    return fail("That pulse is not valid.");
+  }
+  const clearing = String(formData.get("clear") ?? "") === "1";
+  const opensRaw = String(formData.get("opensAt") ?? "").trim();
+  const closesRaw = String(formData.get("closesAt") ?? "").trim();
+  const opensAt = clearing || !opensRaw ? null : new Date(opensRaw);
+  const closesAt = clearing || !closesRaw ? null : new Date(closesRaw);
+  const cadence = clearing ? null : parseSurveyCadence(String(formData.get("cadence") ?? ""));
+  if ((opensAt && Number.isNaN(opensAt.getTime())) || (closesAt && Number.isNaN(closesAt.getTime()))) {
+    return fail("Those dates are not valid.");
+  }
+  try {
+    await setSurveySchedule({ token, opensAt, closesAt, cadence });
+    revalidateSurveyPaths(token);
+    return { ok: true, error: null };
+  } catch (error) {
+    return fail(actionError(error, "Could not schedule this pulse. Is Postgres running?"));
+  }
 }
 
 function revalidateSurveyPaths(token: string) {
