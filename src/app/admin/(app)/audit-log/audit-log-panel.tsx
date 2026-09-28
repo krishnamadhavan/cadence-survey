@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { AuditEvent } from "@/db/audit-log";
+import { auditActionLabel } from "@/lib/audit-csv";
 
 const DEFAULT_PAGE_SIZE = 25;
 const MIN_PAGE_SIZE = 5;
@@ -27,18 +28,6 @@ function visiblePages(current: number, total: number): Array<number | "gap"> {
   return items;
 }
 
-const actionLabel: Record<string, string> = {
-  "admin.added": "Admin added",
-  "admin.removed": "Admin removed",
-  "manager.assigned": "Manager assigned",
-  "manager.unassigned": "Manager unassigned",
-  "api_key.created": "API key created",
-  "api_key.revoked": "API key revoked",
-  "anonymity_floor.changed": "Anonymity floor",
-  "employees.reassigned": "People moved",
-  "team.merged": "Team merged",
-};
-
 export function AuditLogPanel({
   events,
   dbError,
@@ -57,7 +46,7 @@ export function AuditLogPanel({
       return events;
     }
     return events.filter((event) => {
-      const label = actionLabel[event.action] ?? event.action;
+      const label = auditActionLabel(event.action);
       return (
         event.actorEmail.toLowerCase().includes(needle) ||
         event.summary.toLowerCase().includes(needle) ||
@@ -89,12 +78,22 @@ export function AuditLogPanel({
 
   return (
     <>
-      <div className="min-w-0">
-        <h1 className="font-serif text-4xl text-ink">Audit log</h1>
-        <p className="mt-2 text-ink/60">
-          Who changed admins, managers, API keys, and the anonymity floor.
-          Newest first.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-serif text-4xl text-ink">Audit log</h1>
+          <p className="mt-2 text-ink/60">
+            Who did what, and when. Newest first. The CSV is the whole log, not
+            just this page.
+          </p>
+        </div>
+        {dbError ? null : (
+          <a
+            href="/api/admin/audit-log"
+            className="inline-flex h-10 shrink-0 items-center rounded-full border border-ink/15 px-4 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            Download CSV
+          </a>
+        )}
       </div>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -146,7 +145,7 @@ export function AuditLogPanel({
                       </td>
                       <td className="px-4 py-3 text-ink">{event.actorEmail}</td>
                       <td className="px-4 py-3 text-ink/70">
-                        {actionLabel[event.action] ?? event.action}
+                        {auditActionLabel(event.action)}
                       </td>
                       <td className="px-4 py-3 text-ink">{event.summary}</td>
                     </tr>
