@@ -1,6 +1,7 @@
-import { and, asc, count, eq, isNotNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull } from "drizzle-orm";
+import { recordAudit } from "@/db/audit-log";
 import { db } from "@/db/client";
-import { employees, responses, teams } from "@/db/schema";
+import { actionPlans, employees, responses, teams } from "@/db/schema";
 import { parseTeamName, parseTeamSlug } from "@/lib/team-slug";
 
 export type TeamListItem = {
@@ -127,6 +128,93 @@ export async function updateTeam(input: {
     }
     throw error;
   }
+}
+
+export async function mergeTeams(input: {
+  sourceId: string;
+  targetId: string;
+  actor?: { id: string; email: string };
+}): Promise<{ moved: number; sourceName: string; targetName: string }> {
+  if (input.sourceId === input.targetId) {
+    throw new TeamValidationError("Pick a different team to merge into.");
+  }
+
+  return db.transaction(async (tx) => {
+    const locked = await tx
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(inArray(teams.id, [input.sourceId, input.targetId]))
+      .for("update");
+    const source = locked.find((team) => team.id === input.sourceId);
+    const target = locked.find((team) => team.id === input.targetId);
+    if (!source || !target) {
+      throw new TeamNotFoundError("That team is gone.");
+    }
+
+    const moved = await tx
+      .update(employees)
+      .set({ teamId: target.id })
+      .where(eq(employees.teamId, source.id))
+      .returning({ id: employees.id });
+    await tx
+      .update(responses)
+      .set({ teamId: target.id })
+      .where(eq(responses.teamId, source.id));
+
+    const plans = await tx
+      .select({
+        id: actionPlans.id,
+        surveyId: actionPlans.surveyId,
+        status: actionPlans.status,
+      })
+      .from(actionPlans)
+      .where(eq(actionPlans.teamId, source.id));
+    for (const plan of plans) {
+      if (plan.status === "open") {
+        const [clash] = await tx
+          .select({ id: actionPlans.id })
+          .from(actionPlans)
+          .where(
+            and(
+              eq(actionPlans.surveyId, plan.surveyId),
+              eq(actionPlans.teamKey, target.id),
+              eq(actionPlans.status, "open"),
+            ),
+          )
+          .limit(1);
+        if (clash) {
+          await tx.delete(actionPlans).where(eq(actionPlans.id, plan.id));
+          continue;
+        }
+      }
+      await tx
+        .update(actionPlans)
+        .set({ teamId: target.id, teamKey: target.id, teamName: target.name })
+        .where(eq(actionPlans.id, plan.id));
+    }
+
+    const deleted = await tx
+      .delete(teams)
+      .where(eq(teams.id, source.id))
+      .returning({ id: teams.id });
+    if (deleted.length === 0) {
+      throw new TeamNotFoundError("That team is gone.");
+    }
+
+    if (input.actor) {
+      await recordAudit(
+        {
+          actorId: input.actor.id,
+          actorEmail: input.actor.email,
+          action: "team.merged",
+          summary: `Merged ${source.name} into ${target.name}. Moved ${moved.length} ${moved.length === 1 ? "person" : "people"}.`,
+        },
+        tx,
+      );
+    }
+
+    return { moved: moved.length, sourceName: source.name, targetName: target.name };
+  });
 }
 
 export async function deleteTeam(id: string): Promise<void> {

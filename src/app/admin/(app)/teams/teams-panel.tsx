@@ -6,6 +6,7 @@ import { slugifyTeam } from "@/lib/team-slug";
 import {
   createTeamAction,
   deleteTeamAction,
+  mergeTeamAction,
   updateTeamAction,
   type TeamActionState,
 } from "./actions";
@@ -15,7 +16,8 @@ type RosterFilter = "all" | "staffed" | "empty";
 type Dialog =
   | { kind: "create" }
   | { kind: "edit"; team: TeamListItem }
-  | { kind: "delete"; team: TeamListItem };
+  | { kind: "delete"; team: TeamListItem }
+  | { kind: "merge"; team: TeamListItem };
 
 type TeamsPanelProps = {
   teams: TeamListItem[];
@@ -231,6 +233,13 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
                             </button>
                             <button
                               type="button"
+                              className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink"
+                              onClick={() => setDialog({ kind: "merge", team })}
+                            >
+                              Merge
+                            </button>
+                            <button
+                              type="button"
                               className="rounded-full px-3 py-1.5 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-35"
                               disabled={inUse}
                               title={
@@ -324,6 +333,7 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
       {dialog ? (
         <TeamDialog
           dialog={dialog}
+          teams={teams}
           onClose={() => setDialog(null)}
           returnFocusRef={newButtonRef}
         />
@@ -334,10 +344,12 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
 
 function TeamDialog({
   dialog,
+  teams,
   onClose,
   returnFocusRef,
 }: {
   dialog: Dialog;
+  teams: TeamListItem[];
   onClose: () => void;
   returnFocusRef: React.RefObject<HTMLButtonElement | null>;
 }) {
@@ -374,7 +386,9 @@ function TeamDialog({
       ? "New team"
       : dialog.kind === "edit"
         ? "Edit team"
-        : "Delete team";
+        : dialog.kind === "merge"
+          ? "Merge team"
+          : "Delete team";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 sm:p-8">
@@ -408,6 +422,8 @@ function TeamDialog({
         </div>
         {dialog.kind === "delete" ? (
           <DeleteTeamForm team={dialog.team} onCancel={onClose} />
+        ) : dialog.kind === "merge" ? (
+          <MergeTeamForm team={dialog.team} teams={teams} onCancel={onClose} />
         ) : (
           <TeamForm
             team={dialog.kind === "edit" ? dialog.team : null}
@@ -511,6 +527,87 @@ function TeamForm({
           className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-5 text-sm font-medium text-paper transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "Saving…" : team ? "Save" : "Create"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MergeTeamForm({
+  team,
+  teams,
+  onCancel,
+}: {
+  team: TeamListItem;
+  teams: TeamListItem[];
+  onCancel: () => void;
+}) {
+  const [state, action, pending] = useActionState<TeamActionState, FormData>(
+    mergeTeamAction,
+    null,
+  );
+  const others = teams.filter((candidate) => candidate.id !== team.id);
+  if (state?.ok) {
+    return (
+      <div className="px-6 pt-2 pb-6">
+        <p className="text-sm text-ink/70">
+          {team.name} was merged and removed.
+        </p>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-sm font-medium text-paper"
+            onClick={onCancel}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <form action={action}>
+      <input type="hidden" name="sourceId" value={team.id} />
+      <div className="px-6 pt-2 pb-6">
+        <p className="text-sm leading-6 text-ink/70">
+          Move everyone from <span className="font-medium text-ink">{team.name}</span>{" "}
+          onto another team, including past responses, then remove {team.name}.
+        </p>
+        <label className="mt-4 flex flex-col gap-1.5 text-sm">
+          <span className="text-ink/60">Merge into</span>
+          <select
+            name="targetId"
+            required
+            defaultValue=""
+            disabled={others.length === 0}
+            className="h-10 rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30 disabled:opacity-50"
+          >
+            <option value="" disabled>
+              {others.length === 0 ? "No other team" : "Choose a team"}
+            </option>
+            {others.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {state?.error ? <p className="mt-3 text-sm text-rose-800">{state.error}</p> : null}
+      </div>
+      <div className="flex items-center justify-end gap-2 border-t border-ink/10 px-6 py-4">
+        <button
+          type="button"
+          className="inline-flex h-10 items-center rounded-full border border-ink/15 px-4 text-sm font-medium text-ink/70"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={pending || others.length === 0}
+          className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-sm font-medium text-paper disabled:opacity-50"
+        >
+          {pending ? "Merging…" : "Merge"}
         </button>
       </div>
     </form>

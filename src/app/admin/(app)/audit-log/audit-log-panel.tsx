@@ -36,6 +36,7 @@ const actionLabel: Record<string, string> = {
   "api_key.revoked": "API key revoked",
   "anonymity_floor.changed": "Anonymity floor",
   "employees.reassigned": "People moved",
+  "team.merged": "Team merged",
 };
 
 export function AuditLogPanel({

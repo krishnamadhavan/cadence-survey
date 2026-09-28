@@ -10,7 +10,8 @@ export type AuditAction =
   | "api_key.created"
   | "api_key.revoked"
   | "anonymity_floor.changed"
-  | "employees.reassigned";
+  | "employees.reassigned"
+  | "team.merged";
 
 export type AuditEvent = {
   id: string;

@@ -10,9 +10,10 @@ import {
   TeamValidationError,
   createTeam,
   deleteTeam,
+  mergeTeams,
   updateTeam,
 } from "@/db/teams";
-import { hasAdminSession } from "@/lib/admin";
+import { getAdminSessionUser, hasAdminSession } from "@/lib/admin";
 
 export type TeamActionState = {
   ok: boolean;
@@ -28,6 +29,43 @@ function fail(error: string): TeamActionState {
 function revalidateTeamPages() {
   revalidatePath("/admin/teams");
   revalidatePath("/admin/employees");
+  revalidatePath("/admin/org-chart");
+  revalidatePath("/admin/managers");
+  revalidatePath("/admin/action-plans");
+  revalidatePath("/admin/audit-log");
+}
+
+export async function mergeTeamAction(
+  _prev: TeamActionState,
+  formData: FormData,
+): Promise<TeamActionState> {
+  const actor = await getAdminSessionUser();
+  if (!actor) {
+    redirect("/admin/login?next=/admin/teams");
+  }
+  const sourceId = teamIdSchema.safeParse(String(formData.get("sourceId") ?? ""));
+  const targetId = teamIdSchema.safeParse(String(formData.get("targetId") ?? ""));
+  if (!sourceId.success || !targetId.success) {
+    return fail("Pick the team to merge into.");
+  }
+  try {
+    await mergeTeams({
+      sourceId: sourceId.data,
+      targetId: targetId.data,
+      actor: { id: actor.id, email: actor.email },
+    });
+    revalidateTeamPages();
+    return { ok: true, error: null };
+  } catch (error) {
+    if (
+      error instanceof TeamValidationError ||
+      error instanceof TeamNotFoundError ||
+      error instanceof TeamInUseError
+    ) {
+      return fail(error.message);
+    }
+    return fail("Could not merge those teams. Is Postgres running?");
+  }
 }
 
 export async function createTeamAction(
