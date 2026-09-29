@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, exists, gt, isNotNull, isNull, lte, lt } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, isNotNull, isNull, lte, lt, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   questions,
@@ -219,12 +219,17 @@ async function spawnNextPulses(
         isNotNull(surveys.opensAt),
         isNotNull(surveys.closesAt),
       ),
-    );
+    )
+    .orderBy(asc(surveys.id))
+    .for("update");
   for (const source of due) {
     if (!source.opensAt || !source.closesAt || !source.cadence) {
       continue;
     }
     const window = nextSurveyWindow(source.opensAt, source.closesAt, source.cadence, now);
+    if (!window || window.closesAt <= now) {
+      continue;
+    }
     const [created] = await tx
       .insert(surveys)
       .values({
@@ -264,13 +269,17 @@ async function spawnNextPulses(
         })),
       );
     }
-    await tx
+    const [linked] = await tx
       .update(surveys)
       .set({
         nextSurveyId: created.id,
         seriesId: source.seriesId ?? source.id,
       })
-      .where(eq(surveys.id, source.id));
+      .where(and(eq(surveys.id, source.id), isNull(surveys.nextSurveyId)))
+      .returning({ id: surveys.id });
+    if (!linked) {
+      await tx.delete(surveys).where(eq(surveys.id, created.id));
+    }
   }
 }
 
@@ -308,6 +317,8 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
         ),
       );
     await spawnNextPulses(tx, now);
+    // An ended draft was opened above so this tick can close it. Do not open
+    // the follow-up draft when that next window has already ended.
     await tx
       .update(surveys)
       .set({ status: "open" })
@@ -316,6 +327,7 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
           eq(surveys.status, "draft"),
           isNotNull(surveys.opensAt),
           lte(surveys.opensAt, now),
+          or(isNull(surveys.closesAt), gt(surveys.closesAt, now)),
           exists(
             tx
               .select({ id: questions.id })
