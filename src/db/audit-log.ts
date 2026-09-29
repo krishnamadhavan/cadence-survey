@@ -7,6 +7,7 @@ export type AuditAction =
   | "admin.removed"
   | "manager.assigned"
   | "manager.unassigned"
+  | "manager.portal_password_set"
   | "api_key.created"
   | "api_key.revoked"
   | "anonymity_floor.changed"

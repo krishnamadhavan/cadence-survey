@@ -19,6 +19,10 @@ export function sessionKey(token: string): string {
   return `session:admin:${token}`;
 }
 
+export function managerSessionKey(token: string): string {
+  return `session:manager:${token}`;
+}
+
 function wrapStoreError(error: unknown): never {
   if (error instanceof SessionStoreUnavailable) {
     throw error;
@@ -66,6 +70,51 @@ export async function destroyAdminSession(
   }
   try {
     await store.del(sessionKey(token));
+  } catch (error) {
+    wrapStoreError(error);
+  }
+}
+
+export async function createManagerSession(
+  employeeId: string,
+  store: SessionStore,
+): Promise<string> {
+  const token = randomBytes(32).toString("hex");
+  try {
+    await store.set(managerSessionKey(token), employeeId, "EX", SESSION_TTL_SECONDS);
+  } catch (error) {
+    wrapStoreError(error);
+  }
+  return token;
+}
+
+export async function readManagerSession(
+  token: string | null | undefined,
+  store: SessionStore,
+): Promise<{ employeeId: string } | null> {
+  if (!token) {
+    return null;
+  }
+  try {
+    const employeeId = await store.get(managerSessionKey(token));
+    if (!employeeId) {
+      return null;
+    }
+    return { employeeId };
+  } catch (error) {
+    wrapStoreError(error);
+  }
+}
+
+export async function destroyManagerSession(
+  token: string | null | undefined,
+  store: SessionStore,
+): Promise<void> {
+  if (!token) {
+    return;
+  }
+  try {
+    await store.del(managerSessionKey(token));
   } catch (error) {
     wrapStoreError(error);
   }
