@@ -5,7 +5,7 @@ import { submitSurveyResponse } from "@/lib/submit-response";
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
-  teamId: z.string().uuid(),
+  code: z.string().trim().min(1).max(64),
   answers: z
     .array(
       z.object({
@@ -46,7 +46,7 @@ export async function POST(
     token,
     parsed.data.answers,
     readIp(request),
-    parsed.data.teamId,
+    parsed.data.code,
   );
 
   if (!result.ok) {

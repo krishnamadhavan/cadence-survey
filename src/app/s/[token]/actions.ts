@@ -1,16 +1,12 @@
 "use server";
 
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { submitSurveyResponse } from "@/lib/submit-response";
 
 export type SubmitState = {
   error: string;
 } | null;
-
-function submittedCookie(token: string) {
-  return `cadence_submitted_${token}`;
-}
 
 function readIp(headerStore: Headers): string {
   const forwarded = headerStore.get("x-forwarded-for");
@@ -25,11 +21,11 @@ export async function submitSurvey(
   formData: FormData,
 ): Promise<SubmitState> {
   const token = String(formData.get("token") ?? "").trim();
-  if (!token) {
-    return { error: "Missing survey." };
+  const code = String(formData.get("code") ?? "").trim();
+  if (!token || !code) {
+    return { error: "This link is not valid." };
   }
 
-  const teamId = String(formData.get("teamId") ?? "").trim() || null;
   const incoming = [...formData.entries()]
     .filter(([key]) => key.startsWith("q_"))
     .map(([key, value]) => ({
@@ -38,24 +34,11 @@ export async function submitSurvey(
     }));
 
   const headerStore = await headers();
-  const result = await submitSurveyResponse(
-    token,
-    incoming,
-    readIp(headerStore),
-    teamId,
-  );
+  const result = await submitSurveyResponse(token, incoming, readIp(headerStore), code);
 
   if (!result.ok) {
     return { error: result.error };
   }
-
-  const jar = await cookies();
-  jar.set(submittedCookie(token), "1", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
 
   redirect(`/s/${token}/thanks`);
 }

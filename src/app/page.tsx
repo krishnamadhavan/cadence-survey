@@ -17,12 +17,12 @@ export default async function Home() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 py-16">
       <p className="text-sm tracking-wide text-accent uppercase">Cadence</p>
       <h1 className="mt-4 font-serif text-5xl leading-tight text-ink">
-        Pulse surveys, one public link.
+        Pulse surveys, a link for each person.
       </h1>
       <p className="mt-5 max-w-xl text-lg leading-8 text-ink/70">
-        People open a link, answer a short check-in, and the response lands in
-        Postgres. Redis rate-limits the public submit path. No local database
-        install — both stores run in Docker.
+        Each person opens their own link, answers a short check-in, and the
+        response lands in Postgres with their team. Redis rate-limits the
+        submit path. No local database install — both stores run in Docker.
       </p>
 
       {dbError ? (
@@ -59,8 +59,8 @@ export default async function Home() {
                         {survey.description}
                       </p>
                     ) : null}
-                    <p className="mt-2 font-mono text-xs text-accent">
-                      /s/{survey.publicToken}
+                    <p className="mt-2 text-sm text-ink/50">
+                      Answered through a personal link.
                     </p>
                   </Link>
                 </li>

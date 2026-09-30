@@ -1,12 +1,9 @@
-import { eq } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db/client";
+import { PulseLinkError, takePulseLink } from "@/db/pulse-links";
 import { getSurveyByToken } from "@/db/queries";
-import { answers, responses, teams } from "@/db/schema";
+import { answers, responses } from "@/db/schema";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
 import { limitSurveySubmit } from "@/lib/rate-limit";
-
-const teamIdSchema = z.string().uuid();
 
 export type IncomingAnswer = {
   questionId: string;
@@ -21,7 +18,7 @@ export async function submitSurveyResponse(
   token: string,
   incoming: IncomingAnswer[],
   ip: string,
-  teamId: string | null,
+  code: string,
 ): Promise<SubmitResult> {
   const survey = await getSurveyByToken(token);
   if (!survey || survey.status !== "open") {
@@ -32,8 +29,13 @@ export async function submitSurveyResponse(
     };
   }
 
+  const linkCode = code.trim();
+  if (!linkCode) {
+    return { ok: false, status: 404, error: "This link is not valid." };
+  }
+
   try {
-    const limited = await limitSurveySubmit(token, ip);
+    const limited = await limitSurveySubmit(token, linkCode, ip);
     if (!limited.ok) {
       return {
         ok: false,
@@ -47,25 +49,6 @@ export async function submitSurveyResponse(
       status: 503,
       error: "Could not reach Redis. Is Docker running?",
     };
-  }
-
-  if (!teamId) {
-    return { ok: false, status: 400, error: "Pick your team." };
-  }
-
-  const parsedTeamId = teamIdSchema.safeParse(teamId);
-  if (!parsedTeamId.success) {
-    return { ok: false, status: 400, error: "Pick a valid team." };
-  }
-
-  const [team] = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .where(eq(teams.id, parsedTeamId.data))
-    .limit(1);
-
-  if (!team) {
-    return { ok: false, status: 400, error: "Pick a valid team." };
   }
 
   const byId = new Map(incoming.map((item) => [item.questionId, item.value]));
@@ -123,10 +106,15 @@ export async function submitSurveyResponse(
 
   try {
     const responseId = await db.transaction(async (tx) => {
+      const taken = await takePulseLink(tx, survey.id, linkCode);
       const [response] = await tx
         .insert(responses)
-        .values({ surveyId: survey.id, teamId: team.id })
+        .values({ surveyId: survey.id, teamId: taken.teamId })
         .returning({ id: responses.id });
+
+      if (!response) {
+        throw new Error("response insert failed");
+      }
 
       if (parsed.length > 0) {
         await tx.insert(answers).values(
@@ -142,7 +130,17 @@ export async function submitSurveyResponse(
     });
 
     return { ok: true, responseId };
-  } catch {
+  } catch (error) {
+    if (error instanceof PulseLinkError) {
+      if (error.reason === "used") {
+        return {
+          ok: false,
+          status: 409,
+          error: "This link was already used.",
+        };
+      }
+      return { ok: false, status: 404, error: "This link is not valid." };
+    }
     return {
       ok: false,
       status: 503,

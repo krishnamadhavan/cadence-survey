@@ -14,6 +14,7 @@ import {
   parseQuestionType,
   parseTemplateName,
 } from "@/lib/template-question";
+import { ensurePulseLinks } from "@/db/pulse-links";
 import { surveyTransitionError } from "@/lib/survey-status";
 
 export class SurveyNotFoundError extends Error {}
@@ -91,6 +92,9 @@ export async function setSurveyStatus(input: {
         status: surveys.status,
       });
     if (row) {
+      if (row.status === "open") {
+        await ensurePulseLinks(survey.id, tx);
+      }
       return row;
     }
 

@@ -71,6 +71,13 @@
       "when": 1790529899148,
       "tag": "0009_audit_events",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790745317104,
+      "tag": "0010_pulse_links",
+      "breakpoints": true
     }
   ]
 }
