@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { submitSurvey, type SubmitState } from "./actions";
-import type { SurveyQuestion } from "@/db/queries";
+import type { SurveyQuestion, TeamRoleOptions } from "@/db/queries";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
 
 type TeamOption = {
@@ -14,20 +14,30 @@ type SurveyFormProps = {
   token: string;
   questions: SurveyQuestion[];
   teams: TeamOption[];
+  rolesByTeam: TeamRoleOptions[];
 };
 
-export function SurveyForm({ token, questions, teams }: SurveyFormProps) {
+export function SurveyForm({
+  token,
+  questions,
+  teams,
+  rolesByTeam,
+}: SurveyFormProps) {
   const [state, action, pending] = useActionState<SubmitState, FormData>(
     submitSurvey,
     null,
   );
   const [values, setValues] = useState<Record<string, string>>({});
   const [teamId, setTeamId] = useState("");
+  const [role, setRole] = useState("");
+  const teamRoles =
+    rolesByTeam.find((entry) => entry.teamId === teamId)?.roles ?? [];
 
   return (
     <form action={action} className="flex flex-col gap-10">
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="teamId" value={teamId} />
+      <input type="hidden" name="role" value={role} />
 
       <fieldset className="flex flex-col gap-3">
         <legend className="flex flex-col gap-1">
@@ -43,7 +53,10 @@ export function SurveyForm({ token, questions, teams }: SurveyFormProps) {
               <button
                 key={team.id}
                 type="button"
-                onClick={() => setTeamId(team.id)}
+                onClick={() => {
+                  setTeamId(team.id);
+                  setRole("");
+                }}
                 className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
                   selected
                     ? "border-accent bg-accent/10 text-ink"
@@ -57,6 +70,43 @@ export function SurveyForm({ token, questions, teams }: SurveyFormProps) {
           })}
         </div>
       </fieldset>
+
+      {teamRoles.length > 0 ? (
+        <fieldset className="flex flex-col gap-3">
+          <legend className="flex flex-col gap-1">
+            <span className="text-xs font-medium tracking-wide text-ink/45 uppercase">
+              Your role · optional
+            </span>
+            <span className="text-lg font-medium text-ink">
+              Which role are you in?
+            </span>
+          </legend>
+          <p className="text-sm text-ink/55">
+            Pick the role on your team. It is saved with the answer so reports
+            can group by role. Your name is not stored.
+          </p>
+          <div className="flex flex-col gap-2">
+            {teamRoles.map((option) => {
+              const selected = role === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setRole(selected ? "" : option)}
+                  className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                    selected
+                      ? "border-accent bg-accent/10 text-ink"
+                      : "border-ink/10 bg-paper text-ink hover:border-ink/30"
+                  }`}
+                  aria-pressed={selected}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : null}
 
       {questions.map((question, index) => (
         <fieldset key={question.id} className="flex flex-col gap-3">

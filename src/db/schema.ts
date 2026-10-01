@@ -4,6 +4,7 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -78,6 +79,12 @@ export const apiKeys = pgTable("api_keys", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });
 
+export const employeeTenureBand = pgEnum("employee_tenure_band", [
+  "lt_1",
+  "y1_3",
+  "gte_3",
+]);
+
 export const teams = pgTable("teams", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
@@ -93,6 +100,8 @@ export const employees = pgTable(
     teamId: uuid("team_id")
       .notNull()
       .references(() => teams.id, { onDelete: "restrict" }),
+    role: text("role"),
+    tenureBand: employeeTenureBand("tenure_band"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -153,6 +162,8 @@ export const responses = pgTable(
     teamId: uuid("team_id").references(() => teams.id, {
       onDelete: "restrict",
     }),
+    // Snapshot of the role chosen at submit. Not a foreign key: answers must not join back to a person.
+    role: text("role"),
     submittedAt: timestamp("submitted_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -160,6 +171,7 @@ export const responses = pgTable(
   (table) => [
     index("responses_survey_id_idx").on(table.surveyId),
     index("responses_team_id_idx").on(table.teamId),
+    index("responses_survey_role_idx").on(table.surveyId, table.role),
   ],
 );
 

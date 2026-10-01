@@ -11,6 +11,7 @@ export type AuditAction =
   | "api_key.revoked"
   | "anonymity_floor.changed"
   | "employees.reassigned"
+  | "employees.attributes_set"
   | "team.merged";
 
 export type AuditEvent = {

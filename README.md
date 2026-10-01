@@ -24,16 +24,16 @@ Seeded public survey: [http://localhost:3000/s/weekly-pulse](http://localhost:30
 
 Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) — sign in with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`admin@cadence.local` / `cadence-admin` by default). If you already have a `.env` from before this change, copy those two keys from `.env.example` and run `pnpm db:seed` again. Re-seeding updates that admin’s password to match `.env`.
 
-Employee roster: [http://localhost:3000/admin/employees](http://localhost:3000/admin/employees) — upload a CSV with `name,email,team`. Team must match a seeded team name or slug. Existing emails are updated.
+Employee roster: [http://localhost:3000/admin/employees](http://localhost:3000/admin/employees) — upload a CSV with `name,email,team`. Optional `role` and `tenure` (`<1yr`, `1-3yr`, `3yr+`) come in on the same file. Team must match a seeded team name or slug. Existing emails are updated. Leaving role and tenure out of a later file keeps the current values.
 
 Health (Postgres + Redis): [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-Public submit also accepts JSON. `teamId` is required so results can break down by team:
+Public submit also accepts JSON. `teamId` is required so results can break down by team. Optional `role` must match a role already set on that team; it is stored as text on the response and is not linked back to a person.
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/surveys/weekly-pulse/responses \
   -H 'content-type: application/json' \
-  -d '{"teamId":"<team-uuid>","answers":[{"questionId":"<uuid>","value":4}]}'
+  -d '{"teamId":"<team-uuid>","role":"Engineer","answers":[{"questionId":"<uuid>","value":4}]}'
 ```
 
 Admin results API (session cookie from `/admin/login` or `POST /api/admin/login`):
@@ -91,9 +91,9 @@ Next.js stays on the host so hot reload stays fast on macOS. Compose is the data
 - `admins` — seeded email + password hash; sessions live in Redis
 - `surveys` — title, status (`draft` / `open` / `closed`), unique `public_token`
 - `teams` — Engineering, Product, Design, Operations (seeded)
-- `employees` — name, email, team; bulk-loaded from CSV on `/admin/employees`
+- `employees` — name, email, team, optional role and tenure band; bulk-loaded from CSV on `/admin/employees`
 - `questions` — `scale`, `choice`, or `text`
-- `responses` — one row per submit, with `team_id`
+- `responses` — one row per submit, with `team_id` and an optional role snapshot (not a link to the employee). Pulse reports can filter by that role. A role or team is only named when it still meets the anonymity floor.
 - `answers` — jsonb `{ "value": ... }` per question
 
 Scale averages under 3.0 are marked **low**, under 3.5 **watch**. Teams are sorted worst first. A team is only named when it has at least 3 responses; smaller groups are omitted or folded into “Too few to show” so a single person cannot be read off the results.

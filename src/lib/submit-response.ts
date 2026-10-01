@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { getSurveyByToken } from "@/db/queries";
-import { answers, responses, teams } from "@/db/schema";
+import { answers, employees, responses, teams } from "@/db/schema";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
+import { parseRole } from "@/lib/employee-attributes";
 import { limitSurveySubmit } from "@/lib/rate-limit";
 
 const teamIdSchema = z.string().uuid();
@@ -22,6 +23,7 @@ export async function submitSurveyResponse(
   incoming: IncomingAnswer[],
   ip: string,
   teamId: string | null,
+  roleInput?: string | null,
 ): Promise<SubmitResult> {
   const survey = await getSurveyByToken(token);
   if (!survey || survey.status !== "open") {
@@ -66,6 +68,22 @@ export async function submitSurveyResponse(
 
   if (!team) {
     return { ok: false, status: 400, error: "Pick a valid team." };
+  }
+
+  const parsedRole = parseRole(roleInput ?? "");
+  if (!parsedRole.ok) {
+    return { ok: false, status: 400, error: parsedRole.error };
+  }
+  const role = parsedRole.role;
+  if (role) {
+    const [match] = await db
+      .select({ role: employees.role })
+      .from(employees)
+      .where(and(eq(employees.teamId, team.id), eq(employees.role, role)))
+      .limit(1);
+    if (!match) {
+      return { ok: false, status: 400, error: "Pick a role from your team." };
+    }
   }
 
   const byId = new Map(incoming.map((item) => [item.questionId, item.value]));
@@ -125,7 +143,7 @@ export async function submitSurveyResponse(
     const responseId = await db.transaction(async (tx) => {
       const [response] = await tx
         .insert(responses)
-        .values({ surveyId: survey.id, teamId: team.id })
+        .values({ surveyId: survey.id, teamId: team.id, role })
         .returning({ id: responses.id });
 
       if (parsed.length > 0) {

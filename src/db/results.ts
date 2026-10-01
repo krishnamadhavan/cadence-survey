@@ -1,9 +1,11 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { ChoiceOptions, QuestionType, ScaleOptions } from "@/db/schema";
+import { parseRole, ROLE_MAX_LENGTH } from "@/lib/employee-attributes";
 import {
+  MIN_TEAM_RESPONSES,
   SUPPRESSED_TEAM_KEY,
   SUPPRESSED_TEAM_NAME,
   planTeamPublish,
@@ -67,6 +69,8 @@ export type TeamSummary = {
   health: TeamHealth;
 };
 
+export type RoleSegmentVisibility = "all" | "empty" | "hidden" | "shown";
+
 export type SurveyResults = {
   survey: {
     id: string;
@@ -78,7 +82,38 @@ export type SurveyResults = {
   };
   teams: TeamSummary[];
   questions: QuestionResults[];
+  /** Null means every role, including responses that have no role snapshot. */
+  role: string | null;
+  roleVisibility: RoleSegmentVisibility;
 };
+
+/**
+ * Blank or missing means all roles. A role is matched exactly after the
+ * same trim used when it was stored. Over-long input matches nothing.
+ */
+export function normalizeReportRole(role: string | null | undefined): string | null {
+  if (role == null) {
+    return null;
+  }
+  const parsed = parseRole(role);
+  if (!parsed.ok) {
+    return role.trim().slice(0, ROLE_MAX_LENGTH + 1);
+  }
+  return parsed.role;
+}
+
+function anonymityMinimum(configured: number): number {
+  return Number.isInteger(configured) && configured >= MIN_TEAM_RESPONSES
+    ? configured
+    : MIN_TEAM_RESPONSES;
+}
+
+function surveyResponsesWhere(surveyId: string, role: string | null) {
+  if (!role) {
+    return eq(responses.surveyId, surveyId);
+  }
+  return and(eq(responses.surveyId, surveyId), eq(responses.role, role));
+}
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -224,8 +259,64 @@ function publishChoiceTeams(
   return published;
 }
 
+function emptyQuestion(question: {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  options: unknown;
+  position: number;
+}): QuestionResults {
+  if (question.type === "scale") {
+    const options = question.options as ScaleOptions | null;
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      type: question.type,
+      position: question.position,
+      scale: {
+        min: options?.min ?? 1,
+        max: options?.max ?? 5,
+        average: null,
+        count: 0,
+        byTeam: [],
+      },
+      choice: null,
+      text: null,
+    };
+  }
+
+  if (question.type === "choice") {
+    const options = (question.options as ChoiceOptions | null)?.choices ?? [];
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      type: question.type,
+      position: question.position,
+      scale: null,
+      choice: {
+        options,
+        count: 0,
+        counts: Object.fromEntries(options.map((option) => [option, 0])),
+        byTeam: [],
+      },
+      text: null,
+    };
+  }
+
+  return {
+    id: question.id,
+    prompt: question.prompt,
+    type: question.type,
+    position: question.position,
+    scale: null,
+    choice: null,
+    text: { count: 0 },
+  };
+}
+
 export async function getSurveyResults(
   token: string,
+  options?: { role?: string | null },
 ): Promise<SurveyResults | null> {
   const [survey] = await db
     .select()
@@ -243,6 +334,7 @@ export async function getSurveyResults(
     .where(eq(questions.surveyId, survey.id))
     .orderBy(asc(questions.position));
 
+  const role = normalizeReportRole(options?.role);
   const rows = await db
     .select({
       responseId: responses.id,
@@ -256,7 +348,7 @@ export async function getSurveyResults(
     .leftJoin(teams, eq(responses.teamId, teams.id))
     .leftJoin(answers, eq(answers.responseId, responses.id))
     .leftJoin(questions, eq(answers.questionId, questions.id))
-    .where(eq(responses.surveyId, survey.id));
+    .where(surveyResponsesWhere(survey.id, role));
 
   const responseMeta = new Map<
     string,
@@ -282,12 +374,32 @@ export async function getSurveyResults(
     teamResponseIds.set(key, set);
   }
 
+  const floor = anonymityMinimum(await getAnonymityFloor());
+  // A named role with fewer than the floor is itself a small group.
+  // Publishing its average would identify those people.
+  if (role && responseMeta.size < floor) {
+    return {
+      survey: {
+        id: survey.id,
+        title: survey.title,
+        publicToken: survey.publicToken,
+        status: survey.status,
+        responseCount: 0,
+        averageScore: null,
+      },
+      teams: [],
+      questions: surveyQuestions.map((question) => emptyQuestion(question)),
+      role,
+      roleVisibility: responseMeta.size === 0 ? "empty" : "hidden",
+    };
+  }
+
   const publishPlan = planTeamPublish(
     [...teamResponseIds.entries()].map(([key, ids]) => ({
       key,
       count: ids.size,
     })),
-    await getAnonymityFloor(),
+    floor,
   );
   const namedKeys = new Set(publishPlan.namedKeys);
   const suppressedKeys = new Set(publishPlan.suppressedKeys);
@@ -482,11 +594,14 @@ export async function getSurveyResults(
     },
     teams: teamSummaries,
     questions: questionResults,
+    role,
+    roleVisibility: role ? "shown" : "all",
   };
 }
 
 export async function getPublishedComments(
   token: string,
+  options?: { role?: string | null },
 ): Promise<WrittenComment[] | null> {
   const [survey] = await db
     .select()
@@ -498,6 +613,7 @@ export async function getPublishedComments(
     return null;
   }
 
+  const role = normalizeReportRole(options?.role);
   const rows = await db
     .select({
       responseId: responses.id,
@@ -511,14 +627,21 @@ export async function getPublishedComments(
     .leftJoin(teams, eq(responses.teamId, teams.id))
     .leftJoin(answers, eq(answers.responseId, responses.id))
     .leftJoin(questions, eq(answers.questionId, questions.id))
-    .where(eq(responses.surveyId, survey.id));
+    .where(surveyResponsesWhere(survey.id, role));
 
   const teamResponseIds = new Map<string, Set<string>>();
+  const responseIds = new Set<string>();
   for (const row of rows) {
+    responseIds.add(row.responseId);
     const key = teamPublishKey(row.teamId);
     const set = teamResponseIds.get(key) ?? new Set<string>();
     set.add(row.responseId);
     teamResponseIds.set(key, set);
+  }
+
+  const floor = anonymityMinimum(await getAnonymityFloor());
+  if (role && responseIds.size < floor) {
+    return [];
   }
 
   const plan = planTeamPublish(
@@ -526,7 +649,7 @@ export async function getPublishedComments(
       key,
       count: ids.size,
     })),
-    await getAnonymityFloor(),
+    floor,
   );
 
   const drafts: {

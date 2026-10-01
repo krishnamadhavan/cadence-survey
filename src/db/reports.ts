@@ -1,9 +1,13 @@
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { answers, employees, questions, responses, surveys } from "@/db/schema";
 import type { AnswerValue, SurveyStatus } from "@/db/schema";
 import { pickPreviousCycle } from "@/db/reports-cycle";
-import { getSurveyResults, type SurveyResults } from "@/db/results";
+import {
+  getSurveyResults,
+  normalizeReportRole,
+  type SurveyResults,
+} from "@/db/results";
 
 export type ReportListItem = {
   id: string;
@@ -24,11 +28,36 @@ export type SurveyReportDetail = {
   results: SurveyResults;
   previousResults: SurveyResults | null;
   employeeCount: number;
+  role: string | null;
+  roles: string[];
 };
 
-export async function countEmployees() {
-  const [row] = await db.select({ value: count() }).from(employees);
+export async function countEmployees(role?: string | null) {
+  const [row] = await db
+    .select({ value: count() })
+    .from(employees)
+    .where(role ? eq(employees.role, role) : undefined);
   return row?.value ?? 0;
+}
+
+export async function listSegmentRoles(): Promise<string[]> {
+  const [roster, snapshots] = await Promise.all([
+    db
+      .selectDistinct({ role: employees.role })
+      .from(employees)
+      .where(isNotNull(employees.role)),
+    db
+      .selectDistinct({ role: responses.role })
+      .from(responses)
+      .where(isNotNull(responses.role)),
+  ]);
+  const roles = new Set<string>();
+  for (const row of [...roster, ...snapshots]) {
+    if (row.role) {
+      roles.add(row.role);
+    }
+  }
+  return [...roles].sort((a, b) => a.localeCompare(b));
 }
 
 export async function listReportSurveys(): Promise<ReportListItem[]> {
@@ -95,33 +124,84 @@ export async function listReportSurveys(): Promise<ReportListItem[]> {
 
 export async function getSurveyReportDetail(
   token: string,
+  roleInput?: string | null,
 ): Promise<SurveyReportDetail | null> {
-  const [surveys, employeeCount] = await Promise.all([
+  const role = normalizeReportRole(roleInput);
+  const [surveyRows, employeeCount, roles] = await Promise.all([
     listReportSurveys(),
-    countEmployees(),
+    countEmployees(role),
+    listSegmentRoles(),
   ]);
-  const selected = surveys.find((survey) => survey.publicToken === token);
+  const selected = surveyRows.find((survey) => survey.publicToken === token);
   if (!selected) {
     return null;
   }
 
-  const { cycles, previous } = pickPreviousCycle(surveys, selected.publicToken);
+  const { cycles, previous } = pickPreviousCycle(surveyRows, selected.publicToken);
   const [results, previousResults] = await Promise.all([
-    getSurveyResults(selected.publicToken),
-    previous ? getSurveyResults(previous.publicToken) : Promise.resolve(null),
+    getSurveyResults(selected.publicToken, { role }),
+    previous
+      ? getSurveyResults(previous.publicToken, { role })
+      : Promise.resolve(null),
   ]);
   if (!results) {
     return null;
   }
 
+  const cycleRows = role
+    ? await Promise.all(
+        cycles.map(async (cycle) => {
+          const cycleResults =
+            cycle.publicToken === selected.publicToken
+              ? results
+              : cycle.publicToken === previous?.publicToken
+                ? previousResults
+                : await getSurveyResults(cycle.publicToken, { role });
+          return roleCycle(cycle, cycleResults, employeeCount);
+        }),
+      )
+    : cycles;
+
   return {
-    surveys,
-    cycles,
+    surveys: surveyRows,
+    cycles: cycleRows,
     selected,
     previous,
     results,
     previousResults,
     employeeCount,
+    role,
+    roles,
+  };
+}
+
+function roleCycle(
+  cycle: ReportListItem,
+  result: SurveyResults | null,
+  employeeCount: number,
+): ReportListItem {
+  if (
+    !result ||
+    result.roleVisibility === "hidden" ||
+    result.roleVisibility === "empty"
+  ) {
+    return {
+      ...cycle,
+      responseCount: 0,
+      averageScore: null,
+      participation: null,
+    };
+  }
+
+  const responseCount = result.survey.responseCount;
+  return {
+    ...cycle,
+    responseCount,
+    averageScore: result.survey.averageScore,
+    participation:
+      employeeCount > 0
+        ? Math.min(100, Math.round((responseCount / employeeCount) * 100))
+        : null,
   };
 }
 
