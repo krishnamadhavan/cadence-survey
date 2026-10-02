@@ -122,6 +122,11 @@ export const surveys = pgTable("surveys", {
   description: text("description"),
   publicToken: text("public_token").notNull().unique(),
   status: text("status").notNull().$type<SurveyStatus>().default("draft"),
+  opensAt: timestamp("opens_at", { withTimezone: true }),
+  closesAt: timestamp("closes_at", { withTimezone: true }),
+  cadence: text("cadence").$type<"weekly" | "biweekly" | "monthly">(),
+  seriesId: uuid("series_id"),
+  nextSurveyId: uuid("next_survey_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

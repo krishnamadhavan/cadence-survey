@@ -179,6 +179,7 @@ export function SurveysPanel({ surveys, dbError }: SurveysPanelProps) {
                   <tr>
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Schedule</th>
                     <th className="px-4 py-3 font-medium">Responses</th>
                     <th className="px-4 py-3 font-medium">Questions</th>
                     <th className="px-4 py-3 font-medium">Created</th>
@@ -203,6 +204,13 @@ export function SurveysPanel({ surveys, dbError }: SurveysPanelProps) {
                       </td>
                       <td className="px-4 py-3">
                         <StatusPill status={survey.status} />
+                      </td>
+                      <td className="px-4 py-3 text-ink/70">
+                        <ScheduleLabel
+                          opensAt={survey.opensAt}
+                          closesAt={survey.closesAt}
+                          cadence={survey.cadence}
+                        />
                       </td>
                       <td className="px-4 py-3 text-ink/70">
                         {survey.responseCount}
@@ -365,6 +373,55 @@ function StatusPill({ status }: { status: SurveyStatus }) {
       {formatSurveyStatus(status)}
     </span>
   );
+}
+
+function ScheduleLabel({
+  opensAt,
+  closesAt,
+  cadence,
+}: {
+  opensAt: string | null;
+  closesAt: string | null;
+  cadence: "weekly" | "biweekly" | "monthly" | null;
+}) {
+  if (!opensAt && !closesAt) {
+    return <span className="text-ink/35">—</span>;
+  }
+  const repeat =
+    cadence === "weekly"
+      ? "Weekly"
+      : cadence === "biweekly"
+        ? "Every 2 weeks"
+        : cadence === "monthly"
+          ? "Monthly"
+          : null;
+  return (
+    <span className="block whitespace-nowrap text-xs leading-5">
+      {repeat ? (
+        <>
+          {repeat}
+          <br />
+        </>
+      ) : null}
+      {opensAt ? `Opens ${formatWhen(opensAt)}` : "No open date"}
+      <br />
+      {closesAt ? `Closes ${formatWhen(closesAt)}` : "No close date"}
+    </span>
+  );
+}
+
+function formatWhen(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatDate(value: string) {

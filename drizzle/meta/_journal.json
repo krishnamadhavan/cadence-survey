@@ -71,6 +71,20 @@
       "when": 1790529899148,
       "tag": "0009_audit_events",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790620395463,
+      "tag": "0010_survey_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790621119839,
+      "tag": "0011_survey_cadence",
+      "breakpoints": true
     }
   ]
 }
