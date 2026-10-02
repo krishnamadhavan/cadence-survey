@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   MIN_TEAM_RESPONSES,
+  planCombinedSegment,
   planRoleSegment,
   planTeamPublish,
 } from "./min-cell";
@@ -161,4 +162,142 @@ test("ignores a role floor below 3", () => {
   assert.deepEqual(plan.namedKeys, []);
   assert.equal(plan.showSuppressedBucket, false);
   assert.equal(MIN_TEAM_RESPONSES, 3);
+});
+
+const roleFixtures: {
+  teams: { key: string; roleCount: number; totalCount: number }[];
+  floor?: number;
+}[] = [
+  { teams: [{ key: "a", roleCount: 3, totalCount: 4 }] },
+  {
+    teams: [
+      { key: "a", roleCount: 3, totalCount: 4 },
+      { key: "b", roleCount: 5, totalCount: 10 },
+    ],
+  },
+  {
+    teams: [
+      { key: "a", roleCount: 3, totalCount: 3 },
+      { key: "b", roleCount: 1, totalCount: 1 },
+    ],
+  },
+  {
+    teams: [
+      { key: "a", roleCount: 3, totalCount: 4 },
+      { key: "b", roleCount: 3, totalCount: 5 },
+    ],
+  },
+  {
+    teams: [
+      { key: "a", roleCount: 3, totalCount: 4 },
+      { key: "d", roleCount: 0, totalCount: 5 },
+    ],
+  },
+  {
+    teams: [
+      { key: "a", roleCount: 3, totalCount: 4 },
+      { key: "b", roleCount: 4, totalCount: 9 },
+      { key: "c", roleCount: 10, totalCount: 20 },
+    ],
+  },
+  { teams: [{ key: "a", roleCount: 3, totalCount: 6 }] },
+  { teams: [{ key: "a", roleCount: 5, totalCount: 8 }], floor: 5 },
+  { teams: [{ key: "a", roleCount: 2, totalCount: 2 }], floor: 2 },
+];
+
+function asCombined(
+  teams: { key: string; roleCount: number; totalCount: number }[],
+  floor?: number,
+) {
+  const sliceTotal = teams.reduce((sum, team) => sum + team.roleCount, 0);
+  const survey = teams.reduce(
+    (sum, team) => sum + Math.max(team.totalCount, team.roleCount),
+    0,
+  );
+  return planCombinedSegment(
+    teams
+      .filter((team) => team.roleCount > 0)
+      .map((team) => ({
+        key: team.key,
+        sliceCount: team.roleCount,
+        parents: [Math.max(team.totalCount, team.roleCount)],
+      })),
+    [survey],
+    sliceTotal,
+    floor,
+  );
+}
+
+test("combined planner matches the role planner for a role-only slice", () => {
+  for (const fixture of roleFixtures) {
+    assert.deepEqual(
+      asCombined(fixture.teams, fixture.floor),
+      planRoleSegment(fixture.teams, fixture.floor),
+    );
+  }
+});
+
+test("folds a safe team when a suppressed complement is still under the floor", () => {
+  const plan = planCombinedSegment(
+    [
+      { key: "a", sliceCount: 4, parents: [5] },
+      { key: "b", sliceCount: 5, parents: [10] },
+    ],
+    [15],
+    9,
+  );
+
+  assert.equal(plan.hideSlice, false);
+  assert.deepEqual(plan.namedKeys, []);
+  assert.deepEqual(plan.suppressedKeys.sort(), ["a", "b"]);
+  assert.equal(plan.showSuppressedBucket, true);
+});
+
+test("names a team when every coarser complement meets the floor", () => {
+  const plan = planCombinedSegment(
+    [{ key: "a", sliceCount: 5, parents: [10, 5, 5] }],
+    [20, 10, 10, 5],
+    5,
+  );
+
+  assert.equal(plan.hideSlice, false);
+  assert.deepEqual(plan.namedKeys, ["a"]);
+  assert.equal(plan.showSuppressedBucket, false);
+});
+
+test("withholds a team slice when the rest of the survey is 1 or 2", () => {
+  const plan = planCombinedSegment(
+    [{ key: "a", sliceCount: 5, parents: [5] }],
+    [7],
+    5,
+  );
+
+  assert.equal(plan.hideSlice, true);
+  assert.deepEqual(plan.namedKeys, []);
+  assert.equal(plan.showSuppressedBucket, false);
+});
+
+test("withholds a slice when one within-team parent still leaves 1 or 2", () => {
+  const plan = planCombinedSegment(
+    [{ key: "a", sliceCount: 5, parents: [6, 20] }],
+    [20],
+    5,
+  );
+
+  assert.equal(plan.hideSlice, true);
+  assert.deepEqual(plan.suppressedKeys, ["a"]);
+});
+
+test("a zero-count team does not fill in a small complement", () => {
+  const plan = planCombinedSegment(
+    [
+      { key: "a", sliceCount: 3, parents: [4] },
+      { key: "d", sliceCount: 0, parents: [5] },
+    ],
+    [9],
+    3,
+  );
+
+  assert.equal(plan.hideSlice, true);
+  assert.deepEqual(plan.namedKeys, []);
 });

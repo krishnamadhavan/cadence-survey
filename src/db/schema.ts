@@ -179,6 +179,8 @@ export const responses = pgTable(
     }),
     // Snapshot of the role chosen at submit. Not a foreign key: answers must not join back to a person.
     role: text("role"),
+    // Snapshot of the roster tenure band at submit. A band value, not a link to the employee.
+    tenureBand: employeeTenureBand("tenure_band"),
     submittedAt: timestamp("submitted_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -187,12 +189,14 @@ export const responses = pgTable(
     index("responses_survey_id_idx").on(table.surveyId),
     index("responses_team_id_idx").on(table.teamId),
     index("responses_survey_role_idx").on(table.surveyId, table.role),
+    index("responses_survey_tenure_idx").on(table.surveyId, table.tenureBand),
   ],
 );
 
 // A personal answer link. `redeemed` only records that the link was spent.
 // There is no response id and no redeemed time, so the row cannot be joined
-// to what that person wrote. The response itself stores the team, not the employee.
+// to what that person wrote. The response stores the team and a tenure band
+// snapshot, not the employee.
 export const pulseLinks = pgTable(
   "pulse_links",
   {

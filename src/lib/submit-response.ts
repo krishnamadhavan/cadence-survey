@@ -131,7 +131,12 @@ export async function submitSurveyResponse(
 
       const [response] = await tx
         .insert(responses)
-        .values({ surveyId: survey.id, teamId: taken.teamId, role })
+        .values({
+          surveyId: survey.id,
+          teamId: taken.teamId,
+          role,
+          tenureBand: taken.tenureBand,
+        })
         .returning({ id: responses.id });
 
       if (!response) {
