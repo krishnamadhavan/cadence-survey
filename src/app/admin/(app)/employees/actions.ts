@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { EmployeeMoveError, importEmployeesFromCsv, reassignEmployees } from "@/db/employees";
+import {
+  EmployeeAttributeError,
+  EmployeeMoveError,
+  importEmployeesFromCsv,
+  reassignEmployees,
+  updateEmployeeAttributes,
+} from "@/db/employees";
 import { getAdminSessionUser, hasAdminSession } from "@/lib/admin";
 
 export type ImportState = {
@@ -62,6 +68,40 @@ export async function reassignEmployeesAction(
       moved: 0,
       teamName: null,
     };
+  }
+}
+
+export type AttributeState = {
+  ok: boolean;
+  error: string | null;
+} | null;
+
+export async function updateEmployeeAttributesAction(
+  _prev: AttributeState,
+  formData: FormData,
+): Promise<AttributeState> {
+  const actor = await getAdminSessionUser();
+  if (!actor) {
+    redirect("/admin/login?next=/admin/employees");
+  }
+  const employeeId = idSchema.safeParse(String(formData.get("employeeId") ?? ""));
+  if (!employeeId.success) {
+    return { ok: false, error: "That person is not valid." };
+  }
+  try {
+    await updateEmployeeAttributes({
+      employeeId: employeeId.data,
+      role: String(formData.get("role") ?? ""),
+      tenureBand: String(formData.get("tenureBand") ?? ""),
+      actor: { id: actor.id, email: actor.email },
+    });
+    revalidatePath("/admin/employees");
+    return { ok: true, error: null };
+  } catch (error) {
+    if (error instanceof EmployeeAttributeError) {
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: "Could not save those attributes. Is Postgres running?" };
   }
 }
 

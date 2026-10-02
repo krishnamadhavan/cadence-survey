@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { getSurveyByToken, listTeams } from "@/db/queries";
+import {
+  getSurveyByToken,
+  listEmployeeRolesByTeam,
+  listTeams,
+} from "@/db/queries";
 import { SurveyForm } from "./survey-form";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +32,11 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
 
   let survey;
   let teams: Awaited<ReturnType<typeof listTeams>> = [];
+  let rolesByTeam: Awaited<ReturnType<typeof listEmployeeRolesByTeam>> = [];
   try {
     survey = await getSurveyByToken(token);
     teams = await listTeams();
+    rolesByTeam = await listEmployeeRolesByTeam();
   } catch {
     return (
       <Shell>
@@ -96,6 +102,7 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
           token={survey.publicToken}
           questions={survey.questions}
           teams={teams}
+          rolesByTeam={rolesByTeam}
         />
       </div>
     </Shell>

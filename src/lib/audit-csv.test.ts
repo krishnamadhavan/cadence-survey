@@ -33,4 +33,5 @@ test("audit csv lists who did what and when, newest first as given", () => {
     auditActionLabel("manager.portal_password_set"),
     "Portal password set",
   );
+  assert.equal(auditActionLabel("employees.attributes_set"), "Attributes set");
 });

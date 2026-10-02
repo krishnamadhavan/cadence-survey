@@ -20,6 +20,8 @@ const sample: SurveyResults = {
     responseCount: 8,
     averageScore: 3.6,
   },
+  role: null,
+  roleVisibility: "all",
   teams: [
     {
       teamId: "ops",
@@ -98,6 +100,16 @@ test("parseExportFormat treats xls as xlsx", () => {
   assert.equal(parseExportFormat("xls"), "xlsx");
   assert.equal(parseExportFormat("pdf"), null);
   assert.equal(parseExportFormat(null), null);
+});
+
+test("csv names the role only when a segment is selected", () => {
+  const all = buildResultsCsv(sample, []);
+  assert.doesNotMatch(all, /^Role,/m);
+  const csv = buildResultsCsv(
+    { ...sample, role: "Engineer", roleVisibility: "shown" },
+    [],
+  );
+  assert.match(csv, /Role,Engineer/);
 });
 
 test("resultsFilename allowlists the token", () => {

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getPublishedComments, getSurveyResults } from "@/db/results";
+import {
+  getPublishedComments,
+  getSurveyResults,
+  normalizeReportRole,
+} from "@/db/results";
 import { requireAdminApi } from "@/lib/admin";
 import {
   buildResultsCsv,
@@ -20,7 +24,9 @@ export async function GET(
   }
 
   const { token } = await context.params;
-  const format = parseExportFormat(new URL(request.url).searchParams.get("format"));
+  const url = new URL(request.url);
+  const format = parseExportFormat(url.searchParams.get("format"));
+  const role = normalizeReportRole(url.searchParams.get("role"));
   if (!format) {
     return NextResponse.json(
       { error: "Use format=csv or format=xlsx." },
@@ -29,13 +35,31 @@ export async function GET(
   }
 
   try {
-    const results = await getSurveyResults(token);
+    const results = await getSurveyResults(token, { role });
     if (!results) {
       return NextResponse.json({ error: "Survey not found." }, { status: 404 });
     }
+    if (results.roleVisibility === "empty") {
+      return NextResponse.json(
+        { error: "No responses for that role." },
+        { status: 404 },
+      );
+    }
+    if (results.roleVisibility === "hidden") {
+      return NextResponse.json(
+        { error: "Too few responses in that role to export." },
+        { status: 404 },
+      );
+    }
+    if (results.roleVisibility === "withheld") {
+      return NextResponse.json(
+        { error: "That role cannot be exported on its own." },
+        { status: 404 },
+      );
+    }
 
-    const comments = (await getPublishedComments(token)) ?? [];
-    const filename = resultsFilename(results.survey.publicToken, format);
+    const comments = (await getPublishedComments(token, { role })) ?? [];
+    const filename = resultsFilename(results.survey.publicToken, format, role);
 
     if (format === "csv") {
       return new NextResponse(buildResultsCsv(results, comments), {

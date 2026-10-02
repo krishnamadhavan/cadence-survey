@@ -1,14 +1,18 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
 import { applyDueSurveySchedules } from "@/db/surveys";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { ChoiceOptions, QuestionType, ScaleOptions } from "@/db/schema";
+import { parseRole, ROLE_MAX_LENGTH } from "@/lib/employee-attributes";
 import {
+  MIN_TEAM_RESPONSES,
   SUPPRESSED_TEAM_KEY,
   SUPPRESSED_TEAM_NAME,
+  planRoleSegment,
   planTeamPublish,
   teamPublishKey,
+  type TeamPublishPlan,
 } from "@/lib/min-cell";
 import {
   collectPublishedComments,
@@ -68,6 +72,13 @@ export type TeamSummary = {
   health: TeamHealth;
 };
 
+export type RoleSegmentVisibility =
+  | "all"
+  | "empty"
+  | "hidden"
+  | "withheld"
+  | "shown";
+
 export type SurveyResults = {
   survey: {
     id: string;
@@ -82,7 +93,126 @@ export type SurveyResults = {
   };
   teams: TeamSummary[];
   questions: QuestionResults[];
+  /** Null means every role, including responses that have no role snapshot. */
+  role: string | null;
+  roleVisibility: RoleSegmentVisibility;
 };
+
+/**
+ * Blank or missing means all roles. A role is matched exactly after the
+ * same trim used when it was stored. Over-long input matches nothing.
+ */
+export function normalizeReportRole(role: string | null | undefined): string | null {
+  if (role == null) {
+    return null;
+  }
+  const parsed = parseRole(role);
+  if (!parsed.ok) {
+    return role.trim().slice(0, ROLE_MAX_LENGTH + 1);
+  }
+  return parsed.role;
+}
+
+function anonymityMinimum(configured: number): number {
+  return Number.isInteger(configured) && configured >= MIN_TEAM_RESPONSES
+    ? configured
+    : MIN_TEAM_RESPONSES;
+}
+
+/** A passed floor wins. Otherwise read the shared workspace setting. */
+async function resolveAnonymityFloor(floor: number | undefined): Promise<number> {
+  if (
+    typeof floor === "number" &&
+    Number.isInteger(floor) &&
+    floor >= MIN_TEAM_RESPONSES
+  ) {
+    return floor;
+  }
+  return anonymityMinimum(await getAnonymityFloor());
+}
+
+async function loadTeamResponseCounts(
+  surveyId: string,
+): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      teamId: responses.teamId,
+      n: count(),
+    })
+    .from(responses)
+    .where(eq(responses.surveyId, surveyId))
+    .groupBy(responses.teamId);
+
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = teamPublishKey(row.teamId);
+    counts.set(key, (counts.get(key) ?? 0) + Number(row.n));
+  }
+  return counts;
+}
+
+type SegmentDecision =
+  | { visibility: "empty" | "hidden" | "withheld"; plan: null }
+  | { visibility: "all" | "shown"; plan: TeamPublishPlan };
+
+/**
+ * Unfiltered reports use planTeamPublish. A role report also compares
+ * that role with the unfiltered counts so a gap of 1..floor-1 is not
+ * published as its own survey total, team row, or comment set.
+ */
+async function publishPlanForSurvey(
+  surveyId: string,
+  role: string | null,
+  floor: number,
+  roleCounts: Map<string, number>,
+): Promise<SegmentDecision> {
+  if (!role) {
+    return {
+      visibility: "all",
+      plan: planTeamPublish(
+        [...roleCounts.entries()].map(([key, n]) => ({ key, count: n })),
+        floor,
+      ),
+    };
+  }
+
+  const roleTotal = [...roleCounts.values()].reduce((sum, n) => sum + n, 0);
+  if (roleTotal === 0) {
+    return { visibility: "empty", plan: null };
+  }
+  if (roleTotal < floor) {
+    return { visibility: "hidden", plan: null };
+  }
+
+  const totals = await loadTeamResponseCounts(surveyId);
+  const keys = new Set<string>([...totals.keys(), ...roleCounts.keys()]);
+  const segment = planRoleSegment(
+    [...keys].map((key) => ({
+      key,
+      roleCount: roleCounts.get(key) ?? 0,
+      totalCount: totals.get(key) ?? 0,
+    })),
+    floor,
+  );
+  if (segment.hideSlice) {
+    return { visibility: "withheld", plan: null };
+  }
+  return {
+    visibility: "shown",
+    plan: {
+      namedKeys: segment.namedKeys,
+      suppressedKeys: segment.suppressedKeys,
+      showSuppressedBucket: segment.showSuppressedBucket,
+    },
+  };
+}
+
+function surveyResponsesWhere(surveyId: string, role: string | null) {
+  if (!role) {
+    return eq(responses.surveyId, surveyId);
+  }
+  return and(eq(responses.surveyId, surveyId), eq(responses.role, role));
+}
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -228,8 +358,97 @@ function publishChoiceTeams(
   return published;
 }
 
+function emptyQuestion(question: {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  options: unknown;
+  position: number;
+}): QuestionResults {
+  if (question.type === "scale") {
+    const options = question.options as ScaleOptions | null;
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      type: question.type,
+      position: question.position,
+      scale: {
+        min: options?.min ?? 1,
+        max: options?.max ?? 5,
+        average: null,
+        count: 0,
+        byTeam: [],
+      },
+      choice: null,
+      text: null,
+    };
+  }
+
+  if (question.type === "choice") {
+    const options = (question.options as ChoiceOptions | null)?.choices ?? [];
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      type: question.type,
+      position: question.position,
+      scale: null,
+      choice: {
+        options,
+        count: 0,
+        counts: Object.fromEntries(options.map((option) => [option, 0])),
+        byTeam: [],
+      },
+      text: null,
+    };
+  }
+
+  return {
+    id: question.id,
+    prompt: question.prompt,
+    type: question.type,
+    position: question.position,
+    scale: null,
+    choice: null,
+    text: { count: 0 },
+  };
+}
+
+function redactedSurveyResults(
+  survey: {
+    id: string;
+    title: string;
+    publicToken: string;
+    status: string;
+    opensAt: Date | null;
+    closesAt: Date | null;
+    cadence: "weekly" | "biweekly" | "monthly" | null;
+  },
+  surveyQuestions: Parameters<typeof emptyQuestion>[0][],
+  role: string,
+  roleVisibility: "empty" | "hidden" | "withheld",
+): SurveyResults {
+  return {
+    survey: {
+      id: survey.id,
+      title: survey.title,
+      publicToken: survey.publicToken,
+      status: survey.status,
+      opensAt: survey.opensAt?.toISOString() ?? null,
+      closesAt: survey.closesAt?.toISOString() ?? null,
+      cadence: survey.cadence,
+      responseCount: 0,
+      averageScore: null,
+    },
+    teams: [],
+    questions: surveyQuestions.map((question) => emptyQuestion(question)),
+    role,
+    roleVisibility,
+  };
+}
+
 export async function getSurveyResults(
   token: string,
+  options?: { role?: string | null; floor?: number },
 ): Promise<SurveyResults | null> {
   await applyDueSurveySchedules();
   const [survey] = await db
@@ -248,6 +467,7 @@ export async function getSurveyResults(
     .where(eq(questions.surveyId, survey.id))
     .orderBy(asc(questions.position));
 
+  const role = normalizeReportRole(options?.role);
   const rows = await db
     .select({
       responseId: responses.id,
@@ -261,7 +481,7 @@ export async function getSurveyResults(
     .leftJoin(teams, eq(responses.teamId, teams.id))
     .leftJoin(answers, eq(answers.responseId, responses.id))
     .leftJoin(questions, eq(answers.questionId, questions.id))
-    .where(eq(responses.surveyId, survey.id));
+    .where(surveyResponsesWhere(survey.id, role));
 
   const responseMeta = new Map<
     string,
@@ -287,13 +507,21 @@ export async function getSurveyResults(
     teamResponseIds.set(key, set);
   }
 
-  const publishPlan = planTeamPublish(
-    [...teamResponseIds.entries()].map(([key, ids]) => ({
-      key,
-      count: ids.size,
-    })),
-    await getAnonymityFloor(),
+  const floor = await resolveAnonymityFloor(options?.floor);
+  const roleCounts = new Map(
+    [...teamResponseIds.entries()].map(([key, ids]) => [key, ids.size]),
   );
+  const decision = await publishPlanForSurvey(survey.id, role, floor, roleCounts);
+  if (!decision.plan) {
+    return redactedSurveyResults(
+      survey,
+      surveyQuestions,
+      role ?? "",
+      decision.visibility,
+    );
+  }
+
+  const publishPlan = decision.plan;
   const namedKeys = new Set(publishPlan.namedKeys);
   const suppressedKeys = new Set(publishPlan.suppressedKeys);
 
@@ -490,11 +718,14 @@ export async function getSurveyResults(
     },
     teams: teamSummaries,
     questions: questionResults,
+    role,
+    roleVisibility: decision.visibility,
   };
 }
 
 export async function getPublishedComments(
   token: string,
+  options?: { role?: string | null; floor?: number },
 ): Promise<WrittenComment[] | null> {
   const [survey] = await db
     .select()
@@ -506,6 +737,7 @@ export async function getPublishedComments(
     return null;
   }
 
+  const role = normalizeReportRole(options?.role);
   const rows = await db
     .select({
       responseId: responses.id,
@@ -519,7 +751,7 @@ export async function getPublishedComments(
     .leftJoin(teams, eq(responses.teamId, teams.id))
     .leftJoin(answers, eq(answers.responseId, responses.id))
     .leftJoin(questions, eq(answers.questionId, questions.id))
-    .where(eq(responses.surveyId, survey.id));
+    .where(surveyResponsesWhere(survey.id, role));
 
   const teamResponseIds = new Map<string, Set<string>>();
   for (const row of rows) {
@@ -529,13 +761,15 @@ export async function getPublishedComments(
     teamResponseIds.set(key, set);
   }
 
-  const plan = planTeamPublish(
-    [...teamResponseIds.entries()].map(([key, ids]) => ({
-      key,
-      count: ids.size,
-    })),
-    await getAnonymityFloor(),
+  const floor = await resolveAnonymityFloor(options?.floor);
+  const roleCounts = new Map(
+    [...teamResponseIds.entries()].map(([key, ids]) => [key, ids.size]),
   );
+  const decision = await publishPlanForSurvey(survey.id, role, floor, roleCounts);
+  if (!decision.plan) {
+    return [];
+  }
+  const plan = decision.plan;
 
   const drafts: {
     question: string;

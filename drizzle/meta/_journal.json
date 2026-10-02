@@ -92,6 +92,13 @@
       "when": 1790963493547,
       "tag": "0012_manager_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790964298588,
+      "tag": "0013_employee_roles",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,7 @@ const actionLabel: Record<string, string> = {
   "api_key.revoked": "API key revoked",
   "anonymity_floor.changed": "Anonymity floor",
   "employees.reassigned": "People moved",
+  "employees.attributes_set": "Attributes set",
   "team.merged": "Team merged",
 };
 

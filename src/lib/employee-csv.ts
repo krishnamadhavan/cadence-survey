@@ -1,3 +1,4 @@
+import { parseRole, parseTenureBand, type TenureBand } from "@/lib/employee-attributes";
 import { normalizeEmail } from "@/lib/email";
 
 export type EmployeeCsvRow = {
@@ -5,6 +6,13 @@ export type EmployeeCsvRow = {
   name: string;
   email: string;
   team: string;
+  role: string | null;
+  tenureBand: TenureBand | null;
+};
+
+export type EmployeeCsvColumns = {
+  role: boolean;
+  tenure: boolean;
 };
 
 export type EmployeeCsvError = {
@@ -15,6 +23,7 @@ export type EmployeeCsvError = {
 export type ParsedEmployeeCsv = {
   rows: EmployeeCsvRow[];
   errors: EmployeeCsvError[];
+  columns: EmployeeCsvColumns;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -82,14 +91,18 @@ function headerIndex(headers: string[], aliases: string[]): number {
 
 export function parseEmployeeCsv(text: string): ParsedEmployeeCsv {
   const records = parseCsvRecords(text);
+  const noColumns = { role: false, tenure: false };
   if (records.length === 0) {
-    return { rows: [], errors: [{ line: 1, message: "The file is empty." }] };
+    return { rows: [], errors: [{ line: 1, message: "The file is empty." }], columns: noColumns };
   }
 
   const headers = (records[0] ?? []).map((header) => header.trim().toLowerCase());
   const nameIndex = headerIndex(headers, ["name", "full name", "employee"]);
   const emailIndex = headerIndex(headers, ["email", "e-mail", "work email"]);
   const teamIndex = headerIndex(headers, ["team", "team name", "department"]);
+  const roleIndex = headerIndex(headers, ["role", "job role", "job title"]);
+  const tenureIndex = headerIndex(headers, ["tenure", "tenure band", "tenure_band"]);
+  const columns = { role: roleIndex >= 0, tenure: tenureIndex >= 0 };
 
   const missing: string[] = [];
   if (nameIndex < 0) missing.push("name");
@@ -104,6 +117,7 @@ export function parseEmployeeCsv(text: string): ParsedEmployeeCsv {
           message: `Missing column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}. Use name, email, team.`,
         },
       ],
+      columns: noColumns,
     };
   }
 
@@ -136,15 +150,39 @@ export function parseEmployeeCsv(text: string): ParsedEmployeeCsv {
       errors.push({ line, message: `Duplicate email in file: ${email}` });
       continue;
     }
+
+    let role: string | null = null;
+    if (roleIndex >= 0) {
+      const parsedRole = parseRole(record[roleIndex] ?? "");
+      if (!parsedRole.ok) {
+        errors.push({ line, message: parsedRole.error });
+        continue;
+      }
+      role = parsedRole.role;
+    }
+
+    let tenureBand: TenureBand | null = null;
+    if (tenureIndex >= 0) {
+      const parsedTenure = parseTenureBand(record[tenureIndex] ?? "");
+      if (parsedTenure === "invalid") {
+        errors.push({
+          line,
+          message: "Tenure must be <1yr, 1-3yr, or 3yr+.",
+        });
+        continue;
+      }
+      tenureBand = parsedTenure;
+    }
+
     seen.add(email);
-    rows.push({ line, name, email, team });
+    rows.push({ line, name, email, team, role, tenureBand });
   }
 
   if (rows.length === 0 && errors.length === 0) {
     errors.push({ line: 1, message: "No employee rows found." });
   }
 
-  return { rows, errors };
+  return { rows, errors, columns };
 }
 
 export function matchTeamId(

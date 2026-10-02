@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   teamId: z.string().uuid(),
+  role: z.string().max(200).optional(),
   answers: z
     .array(
       z.object({
@@ -47,6 +48,7 @@ export async function POST(
     parsed.data.answers,
     readIp(request),
     parsed.data.teamId,
+    parsed.data.role,
   );
 
   if (!result.ok) {

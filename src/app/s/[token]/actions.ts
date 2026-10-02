@@ -30,6 +30,7 @@ export async function submitSurvey(
   }
 
   const teamId = String(formData.get("teamId") ?? "").trim() || null;
+  const role = String(formData.get("role") ?? "");
   const incoming = [...formData.entries()]
     .filter(([key]) => key.startsWith("q_"))
     .map(([key, value]) => ({
@@ -43,6 +44,7 @@ export async function submitSurvey(
     incoming,
     readIp(headerStore),
     teamId,
+    role,
   );
 
   if (!result.ok) {

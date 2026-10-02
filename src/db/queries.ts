@@ -1,7 +1,7 @@
-import { asc, count, eq } from "drizzle-orm";
+import { asc, count, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { applyDueSurveySchedules } from "@/db/surveys";
-import { questions, responses, surveys, teams } from "@/db/schema";
+import { employees, questions, responses, surveys, teams } from "@/db/schema";
 import type { QuestionType, SurveyStatus } from "@/db/schema";
 
 export type AdminSurveyListItem = {
@@ -84,6 +84,31 @@ export async function getSurveyByToken(
     status: survey.status,
     questions: surveyQuestions,
   };
+}
+
+export type TeamRoleOptions = {
+  teamId: string;
+  roles: string[];
+};
+
+export async function listEmployeeRolesByTeam(): Promise<TeamRoleOptions[]> {
+  const rows = await db
+    .select({ teamId: employees.teamId, role: employees.role })
+    .from(employees)
+    .where(isNotNull(employees.role));
+  const byTeam = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (!row.role) {
+      continue;
+    }
+    const set = byTeam.get(row.teamId) ?? new Set<string>();
+    set.add(row.role);
+    byTeam.set(row.teamId, set);
+  }
+  return [...byTeam.entries()].map(([teamId, roles]) => ({
+    teamId,
+    roles: [...roles].sort((a, b) => a.localeCompare(b)),
+  }));
 }
 
 export async function listTeams() {

@@ -18,14 +18,42 @@ test("parseEmployeeCsv keeps a UTF-8 BOM and reordered columns", () => {
     "\uFEFFteam,email,name\nEngineering,ada@x.test,Ada Lovelace\n",
   );
   assert.equal(parsed.errors.length, 0);
+  assert.equal(parsed.columns.role, false);
+  assert.equal(parsed.columns.tenure, false);
   assert.deepEqual(parsed.rows, [
     {
       line: 2,
       name: "Ada Lovelace",
       email: "ada@x.test",
       team: "Engineering",
+      role: null,
+      tenureBand: null,
     },
   ]);
+});
+
+test("parseEmployeeCsv reads role and tenure and rejects an unknown band", () => {
+  const parsed = parseEmployeeCsv(
+    [
+      "name,email,team,role,tenure",
+      "Ada Lovelace,ada@x.test,Engineering,  Product designer  , <1yr",
+      "Bea,bea@x.test,Product,Engineer,1-3yr",
+      "Cam,cam@x.test,Design,Lead,3yr+",
+      "Dee,dee@x.test,Operations,Ops,forever",
+    ].join("\n"),
+  );
+  assert.equal(parsed.columns.role, true);
+  assert.equal(parsed.columns.tenure, true);
+  assert.deepEqual(
+    parsed.rows.map((row) => [row.email, row.role, row.tenureBand]),
+    [
+      ["ada@x.test", "Product designer", "lt_1"],
+      ["bea@x.test", "Engineer", "y1_3"],
+      ["cam@x.test", "Lead", "gte_3"],
+    ],
+  );
+  assert.equal(parsed.errors.length, 1);
+  assert.match(parsed.errors[0]?.message ?? "", /Tenure must be/);
 });
 
 test("parseEmployeeCsv maps headers and rejects bad rows", () => {

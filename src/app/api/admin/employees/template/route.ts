@@ -3,7 +3,8 @@ import { requireAdminApi } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
-const TEMPLATE = "name,email,team\nAda Lovelace,ada@example.com,Engineering\n";
+const TEMPLATE =
+  "name,email,team,role,tenure\nAda Lovelace,ada@example.com,Engineering,Engineer,<1yr\n";
 
 export async function GET(request: Request) {
   const denied = await requireAdminApi(request);
