@@ -26,6 +26,7 @@ export async function submitSurvey(
     return { error: "This link is not valid." };
   }
 
+  const role = String(formData.get("role") ?? "");
   const incoming = [...formData.entries()]
     .filter(([key]) => key.startsWith("q_"))
     .map(([key, value]) => ({
@@ -34,7 +35,13 @@ export async function submitSurvey(
     }));
 
   const headerStore = await headers();
-  const result = await submitSurveyResponse(token, incoming, readIp(headerStore), code);
+  const result = await submitSurveyResponse(
+    token,
+    incoming,
+    readIp(headerStore),
+    code,
+    role,
+  );
 
   if (!result.ok) {
     return { error: result.error };

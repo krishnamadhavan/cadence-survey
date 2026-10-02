@@ -63,3 +63,137 @@ export function planTeamPublish(
 export function teamPublishKey(teamId: string | null): string {
   return teamId ?? "unassigned";
 }
+
+export type RoleSegmentPlan = {
+  /** The role's numbers would expose a group smaller than the floor. */
+  hideSlice: boolean;
+  namedKeys: string[];
+  suppressedKeys: string[];
+  showSuppressedBucket: boolean;
+};
+
+/**
+ * Decide which teams can be named for one role.
+ * The role's own count has to meet the floor, and so does everyone
+ * outside that role on the same team and across the survey. A gap of
+ * 1..floor-1 can be subtracted from the unfiltered report, so those
+ * teams are folded like a small remainder. When folding cannot close
+ * the gap, hideSlice is set and the role publishes nothing.
+ */
+export function planRoleSegment(
+  teams: { key: string; roleCount: number; totalCount: number }[],
+  minResponses: number = MIN_TEAM_RESPONSES,
+): RoleSegmentPlan {
+  const minimum =
+    Number.isInteger(minResponses) && minResponses >= MIN_TEAM_RESPONSES
+      ? minResponses
+      : MIN_TEAM_RESPONSES;
+
+  const merged = new Map<string, { roleCount: number; totalCount: number }>();
+  for (const team of teams) {
+    const roleCount = nonNegative(team.roleCount);
+    const totalCount = nonNegative(team.totalCount);
+    const current = merged.get(team.key) ?? { roleCount: 0, totalCount: 0 };
+    current.roleCount += roleCount;
+    current.totalCount += totalCount;
+    merged.set(team.key, current);
+  }
+
+  const withRole: RoleTeam[] = [];
+  let surveyComplement = 0;
+  for (const [key, counts] of merged) {
+    const totalCount = Math.max(counts.totalCount, counts.roleCount);
+    const complement = totalCount - counts.roleCount;
+    surveyComplement += complement;
+    if (counts.roleCount > 0) {
+      withRole.push({ key, roleCount: counts.roleCount, complement });
+    }
+  }
+
+  if (complementIsSmall(surveyComplement, minimum)) {
+    return {
+      hideSlice: true,
+      namedKeys: [],
+      suppressedKeys: [],
+      showSuppressedBucket: false,
+    };
+  }
+
+  const named: RoleTeam[] = [];
+  const suppressed: RoleTeam[] = [];
+  for (const team of withRole) {
+    if (
+      team.roleCount >= minimum &&
+      !complementIsSmall(team.complement, minimum)
+    ) {
+      named.push(team);
+    } else {
+      suppressed.push(team);
+    }
+  }
+
+  let suppressedCount = suppressed.reduce((sum, team) => sum + team.roleCount, 0);
+  let suppressedComplement = suppressed.reduce(
+    (sum, team) => sum + team.complement,
+    0,
+  );
+
+  named.sort((a, b) => a.roleCount - b.roleCount || a.key.localeCompare(b.key));
+
+  while (
+    named.length > 0 &&
+    ((suppressedCount > 0 && suppressedCount < minimum) ||
+      complementIsSmall(suppressedComplement, minimum))
+  ) {
+    const next = named.shift();
+    if (!next) {
+      break;
+    }
+    suppressed.push(next);
+    suppressedCount += next.roleCount;
+    suppressedComplement += next.complement;
+  }
+
+  if (complementIsSmall(suppressedComplement, minimum)) {
+    return {
+      hideSlice: true,
+      namedKeys: [],
+      suppressedKeys: suppressed.map((team) => team.key),
+      showSuppressedBucket: false,
+    };
+  }
+
+  if (suppressedCount > 0 && suppressedCount < minimum) {
+    return {
+      hideSlice: false,
+      namedKeys: [],
+      suppressedKeys: suppressed.map((team) => team.key),
+      showSuppressedBucket: false,
+    };
+  }
+
+  return {
+    hideSlice: false,
+    namedKeys: named.map((team) => team.key),
+    suppressedKeys: suppressed.map((team) => team.key),
+    showSuppressedBucket: suppressedCount >= minimum,
+  };
+}
+
+type RoleTeam = {
+  key: string;
+  roleCount: number;
+  complement: number;
+};
+
+function nonNegative(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, value);
+}
+
+/** A complement of 0 is safe. 1..floor-1 can be recovered by subtraction. */
+function complementIsSmall(complement: number, minimum: number): boolean {
+  return complement > 0 && complement < minimum;
+}

@@ -52,9 +52,14 @@ export function parseExportFormat(value: string | null): ExportFormat | null {
   return null;
 }
 
-export function resultsFilename(token: string, format: ExportFormat): string {
+export function resultsFilename(
+  token: string,
+  format: ExportFormat,
+  role?: string | null,
+): string {
   const day = new Date().toISOString().slice(0, 10);
-  return `${sanitizeFilenameToken(token)}-results-${day}.${format}`;
+  const rolePart = role ? `-${sanitizeFilenameToken(role)}` : "";
+  return `${sanitizeFilenameToken(token)}${rolePart}-results-${day}.${format}`;
 }
 
 export function buildResultsCsv(
@@ -64,6 +69,7 @@ export function buildResultsCsv(
   const lines: string[] = [
     csvLine(["Survey", results.survey.title]),
     csvLine(["Token", results.survey.publicToken]),
+    ...(results.role ? [csvLine(["Role", results.role])] : []),
     csvLine(["Responses", results.survey.responseCount]),
     csvLine(["Average score", formatScore(results.survey.averageScore)]),
     "",
@@ -198,6 +204,9 @@ export async function buildResultsXlsx(
   const summary = workbook.addWorksheet("Summary");
   summary.addRow(excelCells(["Survey", results.survey.title]));
   summary.addRow(excelCells(["Token", results.survey.publicToken]));
+  if (results.role) {
+    summary.addRow(excelCells(["Role", results.role]));
+  }
   summary.addRow(["Responses", results.survey.responseCount]);
   summary.addRow(["Average score", results.survey.averageScore]);
   summary.getColumn(1).width = 18;

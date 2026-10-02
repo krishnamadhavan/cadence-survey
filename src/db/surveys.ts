@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, exists, gt, lt } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, isNotNull, isNull, lte, lt, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   questions,
@@ -15,6 +15,7 @@ import {
   parseTemplateName,
 } from "@/lib/template-question";
 import { ensurePulseLinks } from "@/db/pulse-links";
+import { nextSurveyWindow, type SurveyCadence } from "@/lib/survey-cadence";
 import { surveyTransitionError } from "@/lib/survey-status";
 
 export class SurveyNotFoundError extends Error {}
@@ -79,7 +80,12 @@ export async function setSurveyStatus(input: {
     const openingDraft = input.status === "open" && survey.status === "draft";
     const [row] = await tx
       .update(surveys)
-      .set({ status: input.status })
+      .set({
+        status: input.status,
+        ...(input.status === "open" && survey.status === "closed"
+          ? { closesAt: null }
+          : {}),
+      })
       .where(
         and(
           eq(surveys.id, survey.id),
@@ -94,6 +100,9 @@ export async function setSurveyStatus(input: {
     if (row) {
       if (row.status === "open") {
         await ensurePulseLinks(survey.id, tx);
+      }
+      if (input.status === "closed") {
+        await spawnNextPulses(tx, new Date());
       }
       return row;
     }
@@ -191,9 +200,190 @@ export async function duplicateSurvey(id: string): Promise<{
   });
 }
 
+async function spawnNextPulses(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  now: Date,
+) {
+  const due = await tx
+    .select({
+      id: surveys.id,
+      title: surveys.title,
+      description: surveys.description,
+      opensAt: surveys.opensAt,
+      closesAt: surveys.closesAt,
+      cadence: surveys.cadence,
+      seriesId: surveys.seriesId,
+    })
+    .from(surveys)
+    .where(
+      and(
+        eq(surveys.status, "closed"),
+        isNotNull(surveys.cadence),
+        isNull(surveys.nextSurveyId),
+        isNotNull(surveys.opensAt),
+        isNotNull(surveys.closesAt),
+      ),
+    )
+    .orderBy(asc(surveys.id))
+    .for("update");
+  for (const source of due) {
+    if (!source.opensAt || !source.closesAt || !source.cadence) {
+      continue;
+    }
+    const window = nextSurveyWindow(source.opensAt, source.closesAt, source.cadence, now);
+    if (!window || window.closesAt <= now) {
+      continue;
+    }
+    const [created] = await tx
+      .insert(surveys)
+      .values({
+        title: source.title,
+        description: source.description,
+        publicToken: randomBytes(16).toString("hex"),
+        status: "draft",
+        opensAt: window.opensAt,
+        closesAt: window.closesAt,
+        cadence: source.cadence,
+        seriesId: source.seriesId ?? source.id,
+      })
+      .returning({ id: surveys.id });
+    if (!created) {
+      continue;
+    }
+    const copied = await tx
+      .select({
+        prompt: questions.prompt,
+        type: questions.type,
+        options: questions.options,
+        position: questions.position,
+        required: questions.required,
+      })
+      .from(questions)
+      .where(eq(questions.surveyId, source.id))
+      .orderBy(asc(questions.position));
+    if (copied.length > 0) {
+      await tx.insert(questions).values(
+        copied.map((question) => ({
+          surveyId: created.id,
+          prompt: question.prompt,
+          type: question.type,
+          options: question.options,
+          position: question.position,
+          required: question.required,
+        })),
+      );
+    }
+    const [linked] = await tx
+      .update(surveys)
+      .set({
+        nextSurveyId: created.id,
+        seriesId: source.seriesId ?? source.id,
+      })
+      .where(and(eq(surveys.id, source.id), isNull(surveys.nextSurveyId)))
+      .returning({ id: surveys.id });
+    if (!linked) {
+      await tx.delete(surveys).where(eq(surveys.id, created.id));
+    }
+  }
+}
+
 function copyTitle(title: string) {
   const prefix = "Copy of ";
   return `${prefix}${title}`.slice(0, 80).trim();
+}
+
+export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
+  await db.transaction(async (tx) => {
+    const opened = await tx
+      .update(surveys)
+      .set({ status: "open" })
+      .where(
+        and(
+          eq(surveys.status, "draft"),
+          isNotNull(surveys.opensAt),
+          lte(surveys.opensAt, now),
+          exists(
+            tx
+              .select({ id: questions.id })
+              .from(questions)
+              .where(eq(questions.surveyId, surveys.id)),
+          ),
+        ),
+      )
+      .returning({ id: surveys.id });
+    for (const survey of opened) {
+      await ensurePulseLinks(survey.id, tx);
+    }
+    await tx
+      .update(surveys)
+      .set({ status: "closed" })
+      .where(
+        and(
+          eq(surveys.status, "open"),
+          isNotNull(surveys.closesAt),
+          lte(surveys.closesAt, now),
+        ),
+      );
+    await spawnNextPulses(tx, now);
+    // An ended draft was opened above so this tick can close it. Do not open
+    // the follow-up draft when that next window has already ended.
+    const openedFollowUps = await tx
+      .update(surveys)
+      .set({ status: "open" })
+      .where(
+        and(
+          eq(surveys.status, "draft"),
+          isNotNull(surveys.opensAt),
+          lte(surveys.opensAt, now),
+          or(isNull(surveys.closesAt), gt(surveys.closesAt, now)),
+          exists(
+            tx
+              .select({ id: questions.id })
+              .from(questions)
+              .where(eq(questions.surveyId, surveys.id)),
+          ),
+        ),
+      )
+      .returning({ id: surveys.id });
+    for (const survey of openedFollowUps) {
+      await ensurePulseLinks(survey.id, tx);
+    }
+  });
+}
+
+export async function setSurveySchedule(input: {
+  token: string;
+  opensAt: Date | null;
+  closesAt: Date | null;
+  cadence: SurveyCadence | null;
+}): Promise<void> {
+  if ((input.opensAt === null) !== (input.closesAt === null)) {
+    throw new SurveyValidationError("Set both an open date and a close date.");
+  }
+  if (input.opensAt && input.closesAt && input.opensAt >= input.closesAt) {
+    throw new SurveyValidationError("The open date has to be before the close date.");
+  }
+  await db.transaction(async (tx) => {
+    const survey = await lockDraft(tx, input.token);
+    const [current] = await tx
+      .select({ seriesId: surveys.seriesId })
+      .from(surveys)
+      .where(eq(surveys.id, survey.id))
+      .limit(1);
+    const [row] = await tx
+      .update(surveys)
+      .set({
+        opensAt: input.opensAt,
+        closesAt: input.closesAt,
+        cadence: input.opensAt ? input.cadence : null,
+        seriesId: input.opensAt ? (current?.seriesId ?? survey.id) : current?.seriesId,
+      })
+      .where(and(eq(surveys.id, survey.id), eq(surveys.status, "draft")))
+      .returning({ id: surveys.id });
+    if (!row) {
+      throw new SurveyStatusError("Only a draft can be scheduled.");
+    }
+  });
 }
 
 export async function listSurveyQuestions(

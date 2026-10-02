@@ -87,7 +87,7 @@ export function UploadForm({ onCancel }: UploadFormProps) {
                 Drop a CSV here, or click to browse
               </span>
               <span className="mt-1 text-sm text-ink/50">
-                name, email, team · up to 1 MB
+                name, email, team, role, tenure · up to 1 MB
               </span>
             </>
           )}

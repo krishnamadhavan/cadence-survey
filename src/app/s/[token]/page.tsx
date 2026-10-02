@@ -62,6 +62,11 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
     <Shell>
       <p className="text-sm tracking-wide text-accent uppercase">Pulse survey</p>
       <h1 className="mt-3 font-serif text-4xl text-ink">{survey.title}</h1>
+      {survey.description ? (
+        <p className="mt-3 max-w-xl text-base leading-7 text-ink/70">
+          {survey.description}
+        </p>
+      ) : null}
       <p className="mt-4 text-ink/70">
         Each person answers through their own link. This address does not
         accept a response.

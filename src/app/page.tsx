@@ -72,7 +72,11 @@ export default async function Home() {
 
       <p className="mt-12 text-sm text-ink/45">
         <Link href="/admin" className="underline-offset-4 hover:text-ink hover:underline">
-          Admin results
+          Admin
+        </Link>
+        {" · "}
+        <Link href="/manage" className="underline-offset-4 hover:text-ink hover:underline">
+          Managers
         </Link>
       </p>
 

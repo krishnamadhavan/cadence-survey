@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { recordAudit } from "@/db/audit-log";
+import { setManagerPortalPassword } from "@/db/manager-accounts";
 import {
   ManagerNotFoundError,
   ManagerValidationError,
@@ -95,5 +96,35 @@ export async function unassignManagerAction(
       return fail(error.message);
     }
     return fail("Could not unassign that manager. Is Postgres running?");
+  }
+}
+
+export async function setManagerPortalPasswordAction(
+  _prev: ManagerActionState,
+  formData: FormData,
+): Promise<ManagerActionState> {
+  const actor = await getAdminSessionUser();
+  if (!actor) {
+    redirect("/admin/login?next=/admin/managers");
+  }
+  const employeeId = idSchema.safeParse(String(formData.get("employeeId") ?? ""));
+  const password = String(formData.get("password") ?? "");
+  if (!employeeId.success) {
+    return fail("Pick a manager.");
+  }
+  try {
+    await setManagerPortalPassword({
+      employeeId: employeeId.data,
+      password,
+      actor,
+    });
+    revalidateManagerPages();
+    revalidatePath("/admin/audit-log");
+    return { ok: true, error: null };
+  } catch (error) {
+    if (error instanceof ManagerNotFoundError || error instanceof ManagerValidationError) {
+      return fail(error.message);
+    }
+    return fail("Could not save that portal password. Is Postgres running?");
   }
 }

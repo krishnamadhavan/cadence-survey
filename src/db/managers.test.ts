@@ -4,10 +4,12 @@ import { eq, inArray } from "drizzle-orm";
 import { test } from "node:test";
 import { db, pg } from "@/db/client";
 import { employees, teams } from "@/db/schema";
+import { redis } from "@/lib/redis";
 import {
   ManagerNotFoundError,
   ManagerValidationError,
   assignManager,
+  listManagedTeams,
   listManagerAssignments,
   unassignManager,
 } from "./managers";
@@ -17,15 +19,17 @@ const slugA = `qa-mgr-a-${stamp}`;
 const slugB = `qa-mgr-b-${stamp}`;
 const emailA = `mgr-a-${stamp}@cadence.test`;
 const emailB = `mgr-b-${stamp}@cadence.test`;
+const emailC = `mgr-c-${stamp}@cadence.test`;
 
 test("assign, replace, and unassign a team manager", async (t) => {
   const teamIds: string[] = [];
   t.after(async () => {
-    await db.delete(employees).where(inArray(employees.email, [emailA, emailB]));
+    await db.delete(employees).where(inArray(employees.email, [emailA, emailB, emailC]));
     if (teamIds.length > 0) {
       await db.delete(teams).where(inArray(teams.id, teamIds));
     }
     await pg.end({ timeout: 2 });
+    await redis.quit();
   });
 
   const teamA = await insertTeam("QA Managers A", slugA);
@@ -36,6 +40,25 @@ test("assign, replace, and unassign a team manager", async (t) => {
 
   await assignManager({ teamId: teamA, employeeId: personA });
   await assignManager({ teamId: teamB, employeeId: personA });
+  await insertPerson("Casey Report", emailC, teamA);
+
+  const led = await listManagedTeams(personA);
+  assert.deepEqual(
+    led.map((team) => team.name),
+    ["QA Managers A", "QA Managers B"],
+  );
+  assert.deepEqual(
+    led[0]?.people.map((person) => person.email),
+    [emailC],
+  );
+  assert.deepEqual(
+    led[1]?.people.map((person) => person.email),
+    [emailB],
+  );
+  assert.equal(
+    led.some((team) => team.people.some((person) => person.id === personA)),
+    false,
+  );
 
   let rows = await listManagerAssignments();
   const listedA = rows.find((row) => row.teamId === teamA);

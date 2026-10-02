@@ -75,8 +75,36 @@
     {
       "idx": 10,
       "version": "7",
-      "when": 1790745317104,
-      "tag": "0010_pulse_links",
+      "when": 1790620395463,
+      "tag": "0010_survey_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790621119839,
+      "tag": "0011_survey_cadence",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790963493547,
+      "tag": "0012_manager_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790964298588,
+      "tag": "0013_employee_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790965469722,
+      "tag": "0014_pulse_links",
       "breakpoints": true
     }
   ]

@@ -108,7 +108,12 @@ export async function listPulseLinks(surveyToken: string): Promise<PulseLinkList
 export async function readPulseLink(
   surveyToken: string,
   code: string,
-): Promise<{ redeemed: boolean; status: "draft" | "open" | "closed"; title: string } | null> {
+): Promise<{
+  redeemed: boolean;
+  status: "draft" | "open" | "closed";
+  title: string;
+  teamId: string;
+} | null> {
   const normalized = code.trim();
   if (!normalized || normalized.length > 64) {
     return null;
@@ -118,9 +123,11 @@ export async function readPulseLink(
       redeemed: pulseLinks.redeemed,
       status: surveys.status,
       title: surveys.title,
+      teamId: employees.teamId,
     })
     .from(pulseLinks)
     .innerJoin(surveys, eq(surveys.id, pulseLinks.surveyId))
+    .innerJoin(employees, eq(employees.id, pulseLinks.employeeId))
     .where(and(eq(surveys.publicToken, surveyToken), eq(pulseLinks.token, normalized)))
     .limit(1);
   return row ?? null;

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { readPulseLink } from "@/db/pulse-links";
-import { getSurveyByToken } from "@/db/queries";
+import { getSurveyByToken, listEmployeeRolesByTeam } from "@/db/queries";
 import { SurveyForm } from "../survey-form";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,21 @@ export async function generateMetadata({ params }: PersonalSurveyPageProps) {
 
 export default async function PersonalSurveyPage({ params }: PersonalSurveyPageProps) {
   const { token, code } = await params;
+
+  let survey;
+  try {
+    survey = await getSurveyByToken(token);
+  } catch {
+    return (
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 py-16">
+        <p className="text-ink/70">Could not reach Postgres.</p>
+      </main>
+    );
+  }
+
+  if (!survey) {
+    notFound();
+  }
 
   let link;
   try {
@@ -58,20 +73,12 @@ export default async function PersonalSurveyPage({ params }: PersonalSurveyPageP
     );
   }
 
-  let survey;
-  try {
-    survey = await getSurveyByToken(token);
-  } catch {
-    return (
-      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 py-16">
-        <p className="text-ink/70">Could not reach Postgres.</p>
-      </main>
-    );
-  }
-
-  if (!survey || survey.status !== "open") {
+  if (survey.status !== "open") {
     notFound();
   }
+
+  const rolesByTeam = await listEmployeeRolesByTeam();
+  const roles = rolesByTeam.find((entry) => entry.teamId === link.teamId)?.roles ?? [];
 
   return (
     <Shell title={survey.title} eyebrow="Pulse survey">
@@ -79,7 +86,12 @@ export default async function PersonalSurveyPage({ params }: PersonalSurveyPageP
         <p className="mt-3 max-w-xl text-base leading-7 text-ink/70">{survey.description}</p>
       ) : null}
       <div className="mt-10">
-        <SurveyForm token={survey.publicToken} code={code} questions={survey.questions} />
+        <SurveyForm
+          token={survey.publicToken}
+          code={code}
+          questions={survey.questions}
+          roles={roles}
+        />
       </div>
     </Shell>
   );

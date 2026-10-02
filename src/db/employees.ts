@@ -1,11 +1,18 @@
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { recordAudit } from "@/db/audit-log";
 import { db } from "@/db/client";
 import { ensureLinksForOpenSurveys } from "@/db/pulse-links";
 import { employees, teams } from "@/db/schema";
 import {
+  parseRole,
+  parseTenureBand,
+  tenureBandLabel,
+  type TenureBand,
+} from "@/lib/employee-attributes";
+import {
   matchTeamId,
   parseEmployeeCsv,
+  type EmployeeCsvColumns,
   type EmployeeCsvError,
 } from "@/lib/employee-csv";
 
@@ -15,6 +22,8 @@ export type EmployeeListItem = {
   email: string;
   teamId: string;
   teamName: string;
+  role: string | null;
+  tenureBand: TenureBand | null;
 };
 
 export type EmployeeImportResult = {
@@ -24,6 +33,7 @@ export type EmployeeImportResult = {
 };
 
 export class EmployeeMoveError extends Error {}
+export class EmployeeAttributeError extends Error {}
 
 const MOVE_LIMIT = 500;
 
@@ -75,7 +85,62 @@ export async function reassignEmployees(input: {
   });
 }
 
+export async function updateEmployeeAttributes(input: {
+  employeeId: string;
+  role: string;
+  tenureBand: string;
+  actor?: { id: string; email: string };
+}): Promise<{ name: string; role: string | null; tenureBand: TenureBand | null }> {
+  const parsedRole = parseRole(input.role);
+  if (!parsedRole.ok) {
+    throw new EmployeeAttributeError(parsedRole.error);
+  }
+  const parsedTenure = parseTenureBand(input.tenureBand);
+  if (parsedTenure === "invalid") {
+    throw new EmployeeAttributeError("Tenure must be <1yr, 1-3yr, or 3yr+.");
+  }
+
+  return db.transaction(async (tx) => {
+    const [person] = await tx
+      .update(employees)
+      .set({ role: parsedRole.role, tenureBand: parsedTenure })
+      .where(eq(employees.id, input.employeeId))
+      .returning({ id: employees.id, name: employees.name });
+    if (!person) {
+      throw new EmployeeAttributeError("That person is gone.");
+    }
+    if (input.actor) {
+      const roleLabel = parsedRole.role ?? "no role";
+      const bandLabel = parsedTenure ? tenureBandLabel(parsedTenure) : "no tenure";
+      await recordAudit(
+        {
+          actorId: input.actor.id,
+          actorEmail: input.actor.email,
+          action: "employees.attributes_set",
+          summary: `Set ${person.name} to ${roleLabel}, ${bandLabel}`,
+        },
+        tx,
+      );
+    }
+    return { name: person.name, role: parsedRole.role, tenureBand: parsedTenure };
+  });
+}
+
 const INSERT_CHUNK = 500;
+
+function conflictSet(columns: EmployeeCsvColumns): {
+  name: SQL;
+  teamId: SQL;
+  role?: SQL;
+  tenureBand?: SQL;
+} {
+  return {
+    name: sql`excluded.name`,
+    teamId: sql`excluded.team_id`,
+    ...(columns.role ? { role: sql`excluded.role` } : {}),
+    ...(columns.tenure ? { tenureBand: sql`excluded.tenure_band` } : {}),
+  };
+}
 
 export async function listEmployees(): Promise<EmployeeListItem[]> {
   return db
@@ -85,6 +150,8 @@ export async function listEmployees(): Promise<EmployeeListItem[]> {
       email: employees.email,
       teamId: employees.teamId,
       teamName: teams.name,
+      role: employees.role,
+      tenureBand: employees.tenureBand,
     })
     .from(employees)
     .innerJoin(teams, eq(employees.teamId, teams.id))
@@ -105,7 +172,13 @@ export async function importEmployeesFromCsv(
     .select({ id: teams.id, name: teams.name, slug: teams.slug })
     .from(teams);
 
-  const ready: { name: string; email: string; teamId: string }[] = [];
+  const ready: {
+    name: string;
+    email: string;
+    teamId: string;
+    role?: string | null;
+    tenureBand?: TenureBand | null;
+  }[] = [];
 
   for (const row of parsed.rows) {
     const teamId = matchTeamId(row.team, teamRows);
@@ -120,6 +193,8 @@ export async function importEmployeesFromCsv(
       name: row.name,
       email: row.email,
       teamId,
+      ...(parsed.columns.role ? { role: row.role } : {}),
+      ...(parsed.columns.tenure ? { tenureBand: row.tenureBand } : {}),
     });
   }
 
@@ -138,10 +213,7 @@ export async function importEmployeesFromCsv(
         .values(chunk)
         .onConflictDoUpdate({
           target: employees.email,
-          set: {
-            name: sql`excluded.name`,
-            teamId: sql`excluded.team_id`,
-          },
+          set: conflictSet(parsed.columns),
         })
         .returning({
           inserted: sql<boolean>`xmax = 0`,

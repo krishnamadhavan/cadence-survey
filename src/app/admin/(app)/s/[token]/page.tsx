@@ -10,6 +10,7 @@ import { formatSurveyStatus } from "@/lib/survey-status";
 import { CopyLinkButton } from "./copy-link-button";
 import { ExportButtons } from "./export-buttons";
 import { SurveyDraftEditor } from "./survey-editor";
+import { SurveySchedule } from "./survey-schedule";
 import { SurveyLifecycle } from "./survey-lifecycle";
 
 export const dynamic = "force-dynamic";
@@ -130,11 +131,19 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
       </section>
 
       {status === "draft" ? (
-        <SurveyDraftEditor
-          token={results.survey.publicToken}
-          title={results.survey.title}
-          questions={draftQuestions}
-        />
+        <>
+          <SurveySchedule
+            token={results.survey.publicToken}
+            opensAt={results.survey.opensAt}
+            closesAt={results.survey.closesAt}
+            cadence={results.survey.cadence}
+          />
+          <SurveyDraftEditor
+            token={results.survey.publicToken}
+            title={results.survey.title}
+            questions={draftQuestions}
+          />
+        </>
       ) : null}
 
       <section className="mt-10 grid gap-3 sm:grid-cols-3">

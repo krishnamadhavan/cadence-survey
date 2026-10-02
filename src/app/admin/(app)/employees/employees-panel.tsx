@@ -2,7 +2,13 @@
 
 import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { EmployeeListItem } from "@/db/employees";
-import { reassignEmployeesAction, type MoveState } from "./actions";
+import { TENURE_BANDS, tenureBandLabel } from "@/lib/employee-attributes";
+import {
+  reassignEmployeesAction,
+  updateEmployeeAttributesAction,
+  type AttributeState,
+  type MoveState,
+} from "./actions";
 import { UploadForm } from "./upload-form";
 
 type TeamOption = {
@@ -46,6 +52,8 @@ function visiblePages(
 export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) {
   const [query, setQuery] = useState("");
   const [teamId, setTeamId] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [tenureFilter, setTenureFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pageSizeDraft, setPageSizeDraft] = useState(String(DEFAULT_PAGE_SIZE));
@@ -63,10 +71,36 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
     }
   }, [moveState]);
 
+  const roles = useMemo(() => {
+    const found = new Set<string>();
+    for (const person of people) {
+      if (person.role) {
+        found.add(person.role);
+      }
+    }
+    return [...found].sort((a, b) => a.localeCompare(b));
+  }, [people]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return people.filter((person) => {
       if (teamId !== "all" && person.teamId !== teamId) {
+        return false;
+      }
+      if (roleFilter === "none" && person.role) {
+        return false;
+      }
+      if (roleFilter !== "all" && roleFilter !== "none" && person.role !== roleFilter) {
+        return false;
+      }
+      if (tenureFilter === "none" && person.tenureBand) {
+        return false;
+      }
+      if (
+        tenureFilter !== "all" &&
+        tenureFilter !== "none" &&
+        person.tenureBand !== tenureFilter
+      ) {
         return false;
       }
       if (!needle) {
@@ -74,12 +108,15 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
       }
       return (
         person.name.toLowerCase().includes(needle) ||
-        person.email.toLowerCase().includes(needle)
+        person.email.toLowerCase().includes(needle) ||
+        (person.role ?? "").toLowerCase().includes(needle) ||
+        tenureBandLabel(person.tenureBand).toLowerCase().includes(needle)
       );
     });
-  }, [people, query, teamId]);
+  }, [people, query, roleFilter, teamId, tenureFilter]);
 
-  const filtersActive = query.trim() !== "" || teamId !== "all";
+  const filtersActive =
+    query.trim() !== "" || teamId !== "all" || roleFilter !== "all" || tenureFilter !== "all";
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize;
@@ -111,8 +148,8 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
         <div className="min-w-0">
           <h1 className="font-serif text-4xl text-ink">Employees</h1>
           <p className="mt-2 text-ink/60">
-            Search the roster, filter by team, import a CSV, or move several
-            people to another team.
+            Search the roster, group people by team, role, or tenure, import a
+            CSV, or move several people to another team.
           </p>
         </div>
         <button
@@ -140,7 +177,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                 setQuery(event.target.value);
                 resetToFirstPage();
               }}
-              placeholder="Search name or email"
+              placeholder="Search name, email, or role"
               className="h-10 w-full rounded-full border border-ink/10 bg-white/70 pr-3 pl-9 text-sm text-ink outline-none placeholder:text-ink/35 focus:border-ink/30"
             />
           </label>
@@ -165,6 +202,50 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
               <ChevronIcon />
             </span>
           </label>
+          <label className="relative shrink-0">
+            <span className="sr-only">Filter by role</span>
+            <select
+              value={roleFilter}
+              onChange={(event) => {
+                setRoleFilter(event.target.value);
+                resetToFirstPage();
+              }}
+              className="h-10 appearance-none rounded-full border border-ink/10 bg-white/70 py-0 pr-9 pl-4 text-sm text-ink outline-none focus:border-ink/30"
+            >
+              <option value="all">All roles</option>
+              <option value="none">No role</option>
+              {roles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-ink/40">
+              <ChevronIcon />
+            </span>
+          </label>
+          <label className="relative shrink-0">
+            <span className="sr-only">Filter by tenure</span>
+            <select
+              value={tenureFilter}
+              onChange={(event) => {
+                setTenureFilter(event.target.value);
+                resetToFirstPage();
+              }}
+              className="h-10 appearance-none rounded-full border border-ink/10 bg-white/70 py-0 pr-9 pl-4 text-sm text-ink outline-none focus:border-ink/30"
+            >
+              <option value="all">All tenures</option>
+              <option value="none">No tenure</option>
+              {TENURE_BANDS.map((band) => (
+                <option key={band.value} value={band.value}>
+                  {band.label}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-ink/40">
+              <ChevronIcon />
+            </span>
+          </label>
           {filtersActive ? (
             <button
               type="button"
@@ -172,6 +253,8 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
               onClick={() => {
                 setQuery("");
                 setTeamId("all");
+                setRoleFilter("all");
+                setTenureFilter("all");
                 resetToFirstPage();
               }}
             >
@@ -215,7 +298,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
         ) : (
           <>
             <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
-              <table className="w-full min-w-[28rem] text-left text-sm">
+              <table className="w-full min-w-[52rem] text-left text-sm">
                 <thead className="border-b border-ink/10 text-ink/45">
                   <tr>
                     <th className="w-10 px-4 py-3">
@@ -239,6 +322,8 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">Team</th>
+                    <th className="px-4 py-3 font-medium">Role</th>
+                    <th className="px-4 py-3 font-medium">Tenure</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -263,6 +348,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                       </td>
                       <td className="px-4 py-3 text-ink/70">{person.email}</td>
                       <td className="px-4 py-3 text-ink/70">{person.teamName}</td>
+                      <AttributeCells person={person} />
                     </tr>
                   ))}
                 </tbody>
@@ -351,6 +437,57 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
   );
 }
 
+function AttributeCells({ person }: { person: EmployeeListItem }) {
+  const formId = `employee-attributes-${person.id}`;
+  const [state, action, pending] = useActionState<AttributeState, FormData>(
+    updateEmployeeAttributesAction,
+    null,
+  );
+
+  return (
+    <>
+      <td className="px-4 py-3">
+        <input
+          form={formId}
+          name="role"
+          defaultValue={person.role ?? ""}
+          maxLength={80}
+          placeholder="Role"
+          aria-label={`Role for ${person.name}`}
+          className="h-9 w-40 rounded-full border border-ink/10 bg-white px-3 text-sm text-ink outline-none placeholder:text-ink/35 focus:border-ink/30"
+        />
+      </td>
+      <td className="px-4 py-3">
+        <form id={formId} action={action} className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="employeeId" value={person.id} />
+          <select
+            name="tenureBand"
+            defaultValue={person.tenureBand ?? ""}
+            aria-label={`Tenure for ${person.name}`}
+            className="h-9 rounded-full border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30"
+          >
+            <option value="">Not set</option>
+            {TENURE_BANDS.map((band) => (
+              <option key={band.value} value={band.value}>
+                {band.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            disabled={pending}
+            className="inline-flex h-9 items-center rounded-full border border-ink/10 px-3 text-sm text-ink transition-colors hover:bg-ink/5 disabled:opacity-50"
+          >
+            {pending ? "Saving…" : "Save"}
+          </button>
+          {state?.error ? <span className="text-rose-800">{state.error}</span> : null}
+          {state?.ok ? <span className="text-ink/45">Saved</span> : null}
+        </form>
+      </td>
+    </>
+  );
+}
+
 function ImportModal({
   teams,
   dbError,
@@ -419,7 +556,13 @@ function ImportModal({
             <p className="mt-2 text-sm leading-6 text-ink/70">
               CSV columns: <code className="font-mono text-xs">name</code>,{" "}
               <code className="font-mono text-xs">email</code>,{" "}
-              <code className="font-mono text-xs">team</code>. Team must match
+              <code className="font-mono text-xs">team</code>. Optional{" "}
+              <code className="font-mono text-xs">role</code> and{" "}
+              <code className="font-mono text-xs">tenure</code> (
+              <code className="font-mono text-xs">&lt;1yr</code>,{" "}
+              <code className="font-mono text-xs">1-3yr</code>,{" "}
+              <code className="font-mono text-xs">3yr+</code>
+              ). Leave those columns out to keep current values. Team must match
               one of:{" "}
               {teams.length > 0
                 ? teams.map((team) => team.name).join(", ")

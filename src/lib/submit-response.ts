@@ -1,8 +1,10 @@
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { PulseLinkError, takePulseLink } from "@/db/pulse-links";
 import { getSurveyByToken } from "@/db/queries";
-import { answers, responses } from "@/db/schema";
+import { answers, employees, responses } from "@/db/schema";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
+import { parseRole } from "@/lib/employee-attributes";
 import { limitSurveySubmit } from "@/lib/rate-limit";
 
 export type IncomingAnswer = {
@@ -14,11 +16,14 @@ export type SubmitResult =
   | { ok: true; responseId: string }
   | { ok: false; status: number; error: string };
 
+class RoleSubmitError extends Error {}
+
 export async function submitSurveyResponse(
   token: string,
   incoming: IncomingAnswer[],
   ip: string,
   code: string,
+  roleInput?: string | null,
 ): Promise<SubmitResult> {
   const survey = await getSurveyByToken(token);
   if (!survey || survey.status !== "open") {
@@ -33,6 +38,12 @@ export async function submitSurveyResponse(
   if (!linkCode) {
     return { ok: false, status: 404, error: "This link is not valid." };
   }
+
+  const parsedRole = parseRole(roleInput ?? "");
+  if (!parsedRole.ok) {
+    return { ok: false, status: 400, error: parsedRole.error };
+  }
+  const role = parsedRole.role;
 
   try {
     const limited = await limitSurveySubmit(token, linkCode, ip);
@@ -107,9 +118,20 @@ export async function submitSurveyResponse(
   try {
     const responseId = await db.transaction(async (tx) => {
       const taken = await takePulseLink(tx, survey.id, linkCode);
+      if (role) {
+        const [match] = await tx
+          .select({ role: employees.role })
+          .from(employees)
+          .where(and(eq(employees.teamId, taken.teamId), eq(employees.role, role)))
+          .limit(1);
+        if (!match) {
+          throw new RoleSubmitError("Pick a role from your team.");
+        }
+      }
+
       const [response] = await tx
         .insert(responses)
-        .values({ surveyId: survey.id, teamId: taken.teamId })
+        .values({ surveyId: survey.id, teamId: taken.teamId, role })
         .returning({ id: responses.id });
 
       if (!response) {
@@ -131,6 +153,9 @@ export async function submitSurveyResponse(
 
     return { ok: true, responseId };
   } catch (error) {
+    if (error instanceof RoleSubmitError) {
+      return { ok: false, status: 400, error: error.message };
+    }
     if (error instanceof PulseLinkError) {
       if (error.reason === "used") {
         return {

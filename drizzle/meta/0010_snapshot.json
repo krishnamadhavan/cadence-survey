@@ -1,5 +1,5 @@
 {
-  "id": "8b13c032-26c5-4cc0-b379-16d2937c7f13",
+  "id": "fdf0890a-c921-4710-a690-3a0c96afafe2",
   "prevId": "48590b04-318e-4a93-a94b-8d748c6fcd10",
   "version": "7",
   "dialect": "postgresql",
@@ -496,123 +496,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.pulse_links": {
-      "name": "pulse_links",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "survey_id": {
-          "name": "survey_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "employee_id": {
-          "name": "employee_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "redeemed": {
-          "name": "redeemed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        }
-      },
-      "indexes": {
-        "pulse_links_survey_employee_idx": {
-          "name": "pulse_links_survey_employee_idx",
-          "columns": [
-            {
-              "expression": "survey_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "employee_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "pulse_links_survey_id_idx": {
-          "name": "pulse_links_survey_id_idx",
-          "columns": [
-            {
-              "expression": "survey_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "pulse_links_survey_id_surveys_id_fk": {
-          "name": "pulse_links_survey_id_surveys_id_fk",
-          "tableFrom": "pulse_links",
-          "tableTo": "surveys",
-          "columnsFrom": [
-            "survey_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "pulse_links_employee_id_employees_id_fk": {
-          "name": "pulse_links_employee_id_employees_id_fk",
-          "tableFrom": "pulse_links",
-          "tableTo": "employees",
-          "columnsFrom": [
-            "employee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "pulse_links_token_unique": {
-          "name": "pulse_links_token_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.questions": {
       "name": "questions",
       "schema": "",
@@ -879,6 +762,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'draft'"
+        },
+        "opens_at": {
+          "name": "opens_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closes_at": {
+          "name": "closes_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
