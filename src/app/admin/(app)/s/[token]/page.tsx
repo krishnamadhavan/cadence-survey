@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
+import { listPulseLinks } from "@/db/pulse-links";
 import { listSurveyQuestions } from "@/db/surveys";
 import type { SurveyStatus } from "@/db/schema";
 import { getAnonymityFloor } from "@/db/settings";
 import { formatSurveyStatus } from "@/lib/survey-status";
+import { CopyLinkButton } from "./copy-link-button";
 import { ExportButtons } from "./export-buttons";
 import { SurveyDraftEditor } from "./survey-editor";
 import { SurveySchedule } from "./survey-schedule";
@@ -44,6 +46,13 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   const anonymityFloor = await getAnonymityFloor();
   const draftQuestions =
     status === "draft" ? await listSurveyQuestions(results.survey.publicToken) : [];
+  let pulseLinks: Awaited<ReturnType<typeof listPulseLinks>> = null;
+  let linksError = false;
+  try {
+    pulseLinks = await listPulseLinks(results.survey.publicToken);
+  } catch {
+    linksError = true;
+  }
   const struggling = results.teams.filter(
     (team) =>
       team.health !== "ok" &&
@@ -61,7 +70,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
               href={`/s/${results.survey.publicToken}`}
               className="hover:text-ink"
             >
-              Public link
+              Shared address
             </Link>
             <span className="rounded-full border border-ink/10 px-2.5 py-0.5 text-xs font-medium text-ink/60">
               {formatSurveyStatus(status)}
@@ -81,6 +90,45 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           </p>
         </div>
       </header>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
+          Personal links
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-ink/60">
+          Each person has one link for this pulse. A response is stored with
+          their team, and the link can be used once.
+        </p>
+        {linksError ? (
+          <p className="mt-4 text-sm text-ink/70">Could not load personal links.</p>
+        ) : pulseLinks && !pulseLinks.issued ? (
+          <p className="mt-4 text-sm text-ink/60">
+            Links are created when this pulse opens.
+          </p>
+        ) : pulseLinks && pulseLinks.links.length === 0 ? (
+          <p className="mt-4 text-sm text-ink/60">
+            No one is on the roster yet. Add people on the employees page.
+          </p>
+        ) : (
+          <ul className="mt-4 flex max-h-96 flex-col gap-2 overflow-y-auto">
+            {pulseLinks?.links.map((link) => {
+              const path = `/s/${results.survey.publicToken}/${link.token}`;
+              return (
+                <li
+                  key={link.token}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-white/70 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink">{link.name}</p>
+                    <p className="truncate text-sm text-ink/50">{link.email}</p>
+                  </div>
+                  <CopyLinkButton path={path} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       {status === "draft" ? (
         <>

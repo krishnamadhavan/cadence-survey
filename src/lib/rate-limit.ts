@@ -82,9 +82,10 @@ export async function limitManagerLogin(
 
 export async function limitSurveySubmit(
   token: string,
+  code: string,
   ip: string,
 ): Promise<RateLimitResult> {
-  const key = `rl:survey:${token}:${ip}`;
+  const key = `rl:survey:${token}:${code}:${ip}`;
   const hits = await redis.incr(key);
 
   if (hits === 1) {

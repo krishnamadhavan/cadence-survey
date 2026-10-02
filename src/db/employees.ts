@@ -1,6 +1,7 @@
 import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { recordAudit } from "@/db/audit-log";
 import { db } from "@/db/client";
+import { ensureLinksForOpenSurveys } from "@/db/pulse-links";
 import { employees, teams } from "@/db/schema";
 import {
   parseRole,
@@ -227,6 +228,8 @@ export async function importEmployeesFromCsv(
       }
     }
   });
+
+  await ensureLinksForOpenSurveys();
 
   return { created, updated, errors };
 }

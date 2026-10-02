@@ -1,13 +1,11 @@
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db/client";
+import { PulseLinkError, takePulseLink } from "@/db/pulse-links";
 import { getSurveyByToken } from "@/db/queries";
-import { answers, employees, responses, teams } from "@/db/schema";
+import { answers, employees, responses } from "@/db/schema";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
 import { parseRole } from "@/lib/employee-attributes";
 import { limitSurveySubmit } from "@/lib/rate-limit";
-
-const teamIdSchema = z.string().uuid();
 
 export type IncomingAnswer = {
   questionId: string;
@@ -18,11 +16,13 @@ export type SubmitResult =
   | { ok: true; responseId: string }
   | { ok: false; status: number; error: string };
 
+class RoleSubmitError extends Error {}
+
 export async function submitSurveyResponse(
   token: string,
   incoming: IncomingAnswer[],
   ip: string,
-  teamId: string | null,
+  code: string,
   roleInput?: string | null,
 ): Promise<SubmitResult> {
   const survey = await getSurveyByToken(token);
@@ -34,8 +34,19 @@ export async function submitSurveyResponse(
     };
   }
 
+  const linkCode = code.trim();
+  if (!linkCode) {
+    return { ok: false, status: 404, error: "This link is not valid." };
+  }
+
+  const parsedRole = parseRole(roleInput ?? "");
+  if (!parsedRole.ok) {
+    return { ok: false, status: 400, error: parsedRole.error };
+  }
+  const role = parsedRole.role;
+
   try {
-    const limited = await limitSurveySubmit(token, ip);
+    const limited = await limitSurveySubmit(token, linkCode, ip);
     if (!limited.ok) {
       return {
         ok: false,
@@ -49,41 +60,6 @@ export async function submitSurveyResponse(
       status: 503,
       error: "Could not reach Redis. Is Docker running?",
     };
-  }
-
-  if (!teamId) {
-    return { ok: false, status: 400, error: "Pick your team." };
-  }
-
-  const parsedTeamId = teamIdSchema.safeParse(teamId);
-  if (!parsedTeamId.success) {
-    return { ok: false, status: 400, error: "Pick a valid team." };
-  }
-
-  const [team] = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .where(eq(teams.id, parsedTeamId.data))
-    .limit(1);
-
-  if (!team) {
-    return { ok: false, status: 400, error: "Pick a valid team." };
-  }
-
-  const parsedRole = parseRole(roleInput ?? "");
-  if (!parsedRole.ok) {
-    return { ok: false, status: 400, error: parsedRole.error };
-  }
-  const role = parsedRole.role;
-  if (role) {
-    const [match] = await db
-      .select({ role: employees.role })
-      .from(employees)
-      .where(and(eq(employees.teamId, team.id), eq(employees.role, role)))
-      .limit(1);
-    if (!match) {
-      return { ok: false, status: 400, error: "Pick a role from your team." };
-    }
   }
 
   const byId = new Map(incoming.map((item) => [item.questionId, item.value]));
@@ -141,10 +117,26 @@ export async function submitSurveyResponse(
 
   try {
     const responseId = await db.transaction(async (tx) => {
+      const taken = await takePulseLink(tx, survey.id, linkCode);
+      if (role) {
+        const [match] = await tx
+          .select({ role: employees.role })
+          .from(employees)
+          .where(and(eq(employees.teamId, taken.teamId), eq(employees.role, role)))
+          .limit(1);
+        if (!match) {
+          throw new RoleSubmitError("Pick a role from your team.");
+        }
+      }
+
       const [response] = await tx
         .insert(responses)
-        .values({ surveyId: survey.id, teamId: team.id, role })
+        .values({ surveyId: survey.id, teamId: taken.teamId, role })
         .returning({ id: responses.id });
+
+      if (!response) {
+        throw new Error("response insert failed");
+      }
 
       if (parsed.length > 0) {
         await tx.insert(answers).values(
@@ -160,7 +152,20 @@ export async function submitSurveyResponse(
     });
 
     return { ok: true, responseId };
-  } catch {
+  } catch (error) {
+    if (error instanceof RoleSubmitError) {
+      return { ok: false, status: 400, error: error.message };
+    }
+    if (error instanceof PulseLinkError) {
+      if (error.reason === "used") {
+        return {
+          ok: false,
+          status: 409,
+          error: "This link was already used.",
+        };
+      }
+      return { ok: false, status: 404, error: "This link is not valid." };
+    }
     return {
       ok: false,
       status: 503,

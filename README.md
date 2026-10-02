@@ -1,6 +1,6 @@
 # Cadence
 
-Pulse surveys over a public link. Someone opens `/s/<token>`, answers a short check-in, and the response is stored in Postgres. Redis rate-limits the public submit path.
+Pulse surveys with a personal link for each employee. Someone opens `/s/<survey>/<code>`, answers a short check-in once, and the response is stored with their team, not their name. Redis rate-limits the submit path.
 
 **Stack:** Next.js 16 (App Router) + TypeScript + Drizzle + Postgres 16 + Redis 7.
 
@@ -20,7 +20,7 @@ make setup             # start Postgres + Redis, migrate, seed
 make dev               # http://localhost:3000
 ```
 
-Seeded public survey: [http://localhost:3000/s/weekly-pulse](http://localhost:3000/s/weekly-pulse)
+Seeded survey address: [http://localhost:3000/s/weekly-pulse](http://localhost:3000/s/weekly-pulse). That shared address does not accept answers. Personal links are listed on the survey in admin after people are on the roster.
 
 Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) — sign in with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`admin@cadence.local` / `cadence-admin` by default). If you already have a `.env` from before this change, copy those two keys from `.env.example` and run `pnpm db:seed` again. Re-seeding updates that admin’s password to match `.env`.
 
@@ -28,12 +28,12 @@ Employee roster: [http://localhost:3000/admin/employees](http://localhost:3000/a
 
 Health (Postgres + Redis): [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-Public submit also accepts JSON. `teamId` is required so results can break down by team. Optional `role` must match a role already set on that team; it is stored as text on the response and is not linked back to a person.
+Submit accepts JSON for one personal link. The code comes from that person's link (`/s/<survey>/<code>`). The team is taken from their roster row. The response does not store who answered, and the same code cannot submit twice. Optional `role` must match a role already set on that team; it is stored as text on the response and is not linked back to a person.
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/surveys/weekly-pulse/responses \
   -H 'content-type: application/json' \
-  -d '{"teamId":"<team-uuid>","role":"Engineer","answers":[{"questionId":"<uuid>","value":4}]}'
+  -d '{"code":"<personal-code>","role":"Engineer","answers":[{"questionId":"<uuid>","value":4}]}'
 ```
 
 Admin results API (session cookie from `/admin/login` or `POST /api/admin/login`):
@@ -73,12 +73,13 @@ Default host ports are **5435** (Postgres) and **6380** (Redis) so this stack do
 
 ```
 docker-compose.yml     Postgres + Redis only
-src/app/s/[token]                      Public survey + submit + thanks
+src/app/s/[token]                      Shared address (does not accept answers)
+src/app/s/[token]/[code]               Personal link, one submit
 src/app/admin                          Admin shell (surveys, employees, results)
 src/app/api/health                     Postgres + Redis ping
-src/app/api/surveys/[token]/responses  JSON submit (same path as the form)
+src/app/api/surveys/[token]/responses  JSON submit for a personal code
 src/app/api/admin/surveys/...          Results JSON and CSV/Excel export
-src/db/schema.ts       surveys, questions, responses, answers, teams, admins
+src/db/schema.ts       surveys, questions, responses, answers, teams, pulse_links, admins
 src/db/seed.ts         weekly-pulse + teams + demo responses + admin user
 src/lib/redis.ts       ioredis singleton
 src/lib/rate-limit.ts  submit throttle
@@ -93,6 +94,7 @@ Next.js stays on the host so hot reload stays fast on macOS. Compose is the data
 - `teams` — Engineering, Product, Design, Operations (seeded)
 - `employees` — name, email, team, optional role and tenure band; bulk-loaded from CSV on `/admin/employees`
 - `questions` — `scale`, `choice`, or `text`
+- `pulse_links` — one unguessable code per employee per pulse; spent links are not tied to a response row
 - `responses` — one row per submit, with `team_id` and an optional role snapshot (not a link to the employee). Pulse reports can filter by that role. A role or team is only named when it still meets the anonymity floor. A role is also withheld when the people outside that role are too few to stand apart from the full report.
 - `answers` — jsonb `{ "value": ... }` per question
 

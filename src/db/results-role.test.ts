@@ -17,6 +17,7 @@ import {
   surveys,
   teams,
 } from "@/db/schema";
+import { listPulseLinks } from "@/db/pulse-links";
 import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
 import { redis } from "@/lib/redis";
 import { submitSurveyResponse } from "@/lib/submit-response";
@@ -537,11 +538,20 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
 
   const submitId = await insertSurvey(submitToken, "open");
   const submitQuestion = await insertQuestion(submitId, "scale", "Submit week?", 1);
+  const listed = await listPulseLinks(submitToken);
+  const engineerLink = listed?.links.find(
+    (link) => link.email === `eng-large-${stamp}@cadence.test`,
+  );
+  const designerLink = listed?.links.find(
+    (link) => link.email === `des-large-${stamp}@cadence.test`,
+  );
+  assert.ok(engineerLink);
+  assert.ok(designerLink);
   const stamped = await submitSurveyResponse(
     submitToken,
     [{ questionId: submitQuestion, value: 4 }],
     `role-submit-${stamp}`,
-    large,
+    engineerLink.token,
     `  ${engineerRole}  `,
   );
   assert.equal(stamped.ok, true);
@@ -559,7 +569,7 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     submitToken,
     [{ questionId: submitQuestion, value: 4 }],
     `role-submit-${stamp}`,
-    large,
+    designerLink.token,
     directorRole,
   );
   assert.equal(wrongTeam.ok, false);
@@ -571,7 +581,7 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     submitToken,
     [{ questionId: submitQuestion, value: 3 }],
     `role-submit-${stamp}-blank`,
-    large,
+    designerLink.token,
     "   ",
   );
   assert.equal(skipped.ok, true);
@@ -588,7 +598,7 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     submitToken,
     [{ questionId: submitQuestion, value: 3 }],
     `role-submit-${stamp}-long`,
-    large,
+    designerLink.token,
     "x".repeat(81),
   );
   assert.equal(tooLong.ok, false);

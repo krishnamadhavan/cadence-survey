@@ -1,12 +1,5 @@
-import Link from "next/link";
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import {
-  getSurveyByToken,
-  listEmployeeRolesByTeam,
-  listTeams,
-} from "@/db/queries";
-import { SurveyForm } from "./survey-form";
+import { getSurveyByToken } from "@/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +24,8 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
   const { token } = await params;
 
   let survey;
-  let teams: Awaited<ReturnType<typeof listTeams>> = [];
-  let rolesByTeam: Awaited<ReturnType<typeof listEmployeeRolesByTeam>> = [];
   try {
     survey = await getSurveyByToken(token);
-    teams = await listTeams();
-    rolesByTeam = await listEmployeeRolesByTeam();
   } catch {
     return (
       <Shell>
@@ -55,9 +44,6 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
     notFound();
   }
 
-  const jar = await cookies();
-  const alreadySubmitted = jar.get(`cadence_submitted_${token}`)?.value === "1";
-
   if (survey.status !== "open") {
     return (
       <Shell>
@@ -72,22 +58,6 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
     );
   }
 
-  if (alreadySubmitted) {
-    return (
-      <Shell>
-        <p className="text-sm tracking-wide text-accent uppercase">Cadence</p>
-        <h1 className="mt-3 font-serif text-4xl text-ink">{survey.title}</h1>
-        <p className="mt-4 text-ink/70">You already sent a response. Thank you.</p>
-        <Link
-          href={`/s/${token}/thanks`}
-          className="mt-6 inline-flex text-sm font-medium text-accent underline-offset-4 hover:underline"
-        >
-          View confirmation
-        </Link>
-      </Shell>
-    );
-  }
-
   return (
     <Shell>
       <p className="text-sm tracking-wide text-accent uppercase">Pulse survey</p>
@@ -97,14 +67,10 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
           {survey.description}
         </p>
       ) : null}
-      <div className="mt-10">
-        <SurveyForm
-          token={survey.publicToken}
-          questions={survey.questions}
-          teams={teams}
-          rolesByTeam={rolesByTeam}
-        />
-      </div>
+      <p className="mt-4 text-ink/70">
+        Each person answers through their own link. This address does not
+        accept a response.
+      </p>
     </Shell>
   );
 }

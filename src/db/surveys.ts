@@ -14,6 +14,7 @@ import {
   parseQuestionType,
   parseTemplateName,
 } from "@/lib/template-question";
+import { ensurePulseLinks } from "@/db/pulse-links";
 import { nextSurveyWindow, type SurveyCadence } from "@/lib/survey-cadence";
 import { surveyTransitionError } from "@/lib/survey-status";
 
@@ -97,6 +98,9 @@ export async function setSurveyStatus(input: {
         status: surveys.status,
       });
     if (row) {
+      if (row.status === "open") {
+        await ensurePulseLinks(survey.id, tx);
+      }
       if (input.status === "closed") {
         await spawnNextPulses(tx, new Date());
       }
@@ -290,7 +294,7 @@ function copyTitle(title: string) {
 
 export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx
+    const opened = await tx
       .update(surveys)
       .set({ status: "open" })
       .where(
@@ -305,7 +309,11 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
               .where(eq(questions.surveyId, surveys.id)),
           ),
         ),
-      );
+      )
+      .returning({ id: surveys.id });
+    for (const survey of opened) {
+      await ensurePulseLinks(survey.id, tx);
+    }
     await tx
       .update(surveys)
       .set({ status: "closed" })
@@ -319,7 +327,7 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
     await spawnNextPulses(tx, now);
     // An ended draft was opened above so this tick can close it. Do not open
     // the follow-up draft when that next window has already ended.
-    await tx
+    const openedFollowUps = await tx
       .update(surveys)
       .set({ status: "open" })
       .where(
@@ -335,7 +343,11 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
               .where(eq(questions.surveyId, surveys.id)),
           ),
         ),
-      );
+      )
+      .returning({ id: surveys.id });
+    for (const survey of openedFollowUps) {
+      await ensurePulseLinks(survey.id, tx);
+    }
   });
 }
 
