@@ -158,7 +158,7 @@ export default async function ReportDetailPage({
           </select>
           <p className="text-xs text-ink/45">
             {detail.role
-              ? `${detail.role} across teams. Groups under ${anonymityFloor} responses stay hidden.`
+              ? `${detail.role} across teams. Groups under ${anonymityFloor} responses stay hidden. A role that would leave a smaller group exposed stays in All roles.`
               : "Pick a role to see that role on each team. Team and tenure segments come later."}
           </p>
         </div>
@@ -266,7 +266,9 @@ export default async function ReportDetailPage({
           <p className="mt-3 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
             {previousResults.roleVisibility === "empty"
               ? `No ${detail.role ?? "role"} responses in ${previous.title}.`
-              : `${previous.title} does not have enough responses${detail.role ? ` in ${detail.role}` : ""} to compare.`}
+              : previousResults.roleVisibility === "withheld"
+                ? `${detail.role ?? "That role"} stays in the full report for ${previous.title}, so a smaller group is not broken out.`
+                : `${previous.title} does not have enough responses${detail.role ? ` in ${detail.role}` : ""} to compare.`}
           </p>
         ) : (
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -313,7 +315,13 @@ export default async function ReportDetailPage({
       </>
       ) : (
         <SegmentNotice
-          kind={results.roleVisibility === "hidden" ? "hidden" : "empty"}
+          kind={
+            results.roleVisibility === "hidden"
+              ? "hidden"
+              : results.roleVisibility === "withheld"
+                ? "withheld"
+                : "empty"
+          }
           role={detail.role ?? "This role"}
           floor={anonymityFloor}
         />
@@ -325,7 +333,7 @@ export default async function ReportDetailPage({
         </h2>
         {detail.role ? (
           <p className="mt-1 text-sm text-ink/55">
-            {detail.role} only. A cycle under the anonymity floor is left blank.
+            {detail.role} only. A cycle that is too small, or that would single out a smaller group, is left blank.
           </p>
         ) : null}
         {!hasCycles ? (
@@ -509,15 +517,19 @@ function SegmentNotice({
   role,
   floor,
 }: {
-  kind: "empty" | "hidden";
+  kind: "empty" | "hidden" | "withheld";
   role: string;
   floor: number;
 }) {
+  const message =
+    kind === "empty"
+      ? `No responses for ${role} yet. Responses with no role stay under All roles.`
+      : kind === "withheld"
+        ? `${role} stays in All roles. Showing it on its own would identify a smaller group, so scores, counts, and comments stay in the full report.`
+        : `${role} has too few responses to show. A role needs at least ${floor} responses before scores, counts, or comments are shown.`;
   return (
     <p className="mt-8 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
-      {kind === "empty"
-        ? `No responses for ${role} yet. Responses with no role stay under All roles.`
-        : `${role} has too few responses to show. A role needs at least ${floor} responses before scores, counts, or comments are shown.`}
+      {message}
     </p>
   );
 }

@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
@@ -8,8 +8,10 @@ import {
   MIN_TEAM_RESPONSES,
   SUPPRESSED_TEAM_KEY,
   SUPPRESSED_TEAM_NAME,
+  planRoleSegment,
   planTeamPublish,
   teamPublishKey,
+  type TeamPublishPlan,
 } from "@/lib/min-cell";
 import {
   collectPublishedComments,
@@ -69,7 +71,12 @@ export type TeamSummary = {
   health: TeamHealth;
 };
 
-export type RoleSegmentVisibility = "all" | "empty" | "hidden" | "shown";
+export type RoleSegmentVisibility =
+  | "all"
+  | "empty"
+  | "hidden"
+  | "withheld"
+  | "shown";
 
 export type SurveyResults = {
   survey: {
@@ -106,6 +113,94 @@ function anonymityMinimum(configured: number): number {
   return Number.isInteger(configured) && configured >= MIN_TEAM_RESPONSES
     ? configured
     : MIN_TEAM_RESPONSES;
+}
+
+/** A passed floor wins. Otherwise read the shared workspace setting. */
+async function resolveAnonymityFloor(floor: number | undefined): Promise<number> {
+  if (
+    typeof floor === "number" &&
+    Number.isInteger(floor) &&
+    floor >= MIN_TEAM_RESPONSES
+  ) {
+    return floor;
+  }
+  return anonymityMinimum(await getAnonymityFloor());
+}
+
+async function loadTeamResponseCounts(
+  surveyId: string,
+): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      teamId: responses.teamId,
+      n: count(),
+    })
+    .from(responses)
+    .where(eq(responses.surveyId, surveyId))
+    .groupBy(responses.teamId);
+
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = teamPublishKey(row.teamId);
+    counts.set(key, (counts.get(key) ?? 0) + Number(row.n));
+  }
+  return counts;
+}
+
+type SegmentDecision =
+  | { visibility: "empty" | "hidden" | "withheld"; plan: null }
+  | { visibility: "all" | "shown"; plan: TeamPublishPlan };
+
+/**
+ * Unfiltered reports use planTeamPublish. A role report also compares
+ * that role with the unfiltered counts so a gap of 1..floor-1 is not
+ * published as its own survey total, team row, or comment set.
+ */
+async function publishPlanForSurvey(
+  surveyId: string,
+  role: string | null,
+  floor: number,
+  roleCounts: Map<string, number>,
+): Promise<SegmentDecision> {
+  if (!role) {
+    return {
+      visibility: "all",
+      plan: planTeamPublish(
+        [...roleCounts.entries()].map(([key, n]) => ({ key, count: n })),
+        floor,
+      ),
+    };
+  }
+
+  const roleTotal = [...roleCounts.values()].reduce((sum, n) => sum + n, 0);
+  if (roleTotal === 0) {
+    return { visibility: "empty", plan: null };
+  }
+  if (roleTotal < floor) {
+    return { visibility: "hidden", plan: null };
+  }
+
+  const totals = await loadTeamResponseCounts(surveyId);
+  const keys = new Set<string>([...totals.keys(), ...roleCounts.keys()]);
+  const segment = planRoleSegment(
+    [...keys].map((key) => ({
+      key,
+      roleCount: roleCounts.get(key) ?? 0,
+      totalCount: totals.get(key) ?? 0,
+    })),
+    floor,
+  );
+  if (segment.hideSlice) {
+    return { visibility: "withheld", plan: null };
+  }
+  return {
+    visibility: "shown",
+    plan: {
+      namedKeys: segment.namedKeys,
+      suppressedKeys: segment.suppressedKeys,
+      showSuppressedBucket: segment.showSuppressedBucket,
+    },
+  };
 }
 
 function surveyResponsesWhere(surveyId: string, role: string | null) {
@@ -314,9 +409,36 @@ function emptyQuestion(question: {
   };
 }
 
+function redactedSurveyResults(
+  survey: {
+    id: string;
+    title: string;
+    publicToken: string;
+    status: string;
+  },
+  surveyQuestions: Parameters<typeof emptyQuestion>[0][],
+  role: string,
+  roleVisibility: "empty" | "hidden" | "withheld",
+): SurveyResults {
+  return {
+    survey: {
+      id: survey.id,
+      title: survey.title,
+      publicToken: survey.publicToken,
+      status: survey.status,
+      responseCount: 0,
+      averageScore: null,
+    },
+    teams: [],
+    questions: surveyQuestions.map((question) => emptyQuestion(question)),
+    role,
+    roleVisibility,
+  };
+}
+
 export async function getSurveyResults(
   token: string,
-  options?: { role?: string | null },
+  options?: { role?: string | null; floor?: number },
 ): Promise<SurveyResults | null> {
   const [survey] = await db
     .select()
@@ -374,33 +496,21 @@ export async function getSurveyResults(
     teamResponseIds.set(key, set);
   }
 
-  const floor = anonymityMinimum(await getAnonymityFloor());
-  // A named role with fewer than the floor is itself a small group.
-  // Publishing its average would identify those people.
-  if (role && responseMeta.size < floor) {
-    return {
-      survey: {
-        id: survey.id,
-        title: survey.title,
-        publicToken: survey.publicToken,
-        status: survey.status,
-        responseCount: 0,
-        averageScore: null,
-      },
-      teams: [],
-      questions: surveyQuestions.map((question) => emptyQuestion(question)),
-      role,
-      roleVisibility: responseMeta.size === 0 ? "empty" : "hidden",
-    };
+  const floor = await resolveAnonymityFloor(options?.floor);
+  const roleCounts = new Map(
+    [...teamResponseIds.entries()].map(([key, ids]) => [key, ids.size]),
+  );
+  const decision = await publishPlanForSurvey(survey.id, role, floor, roleCounts);
+  if (!decision.plan) {
+    return redactedSurveyResults(
+      survey,
+      surveyQuestions,
+      role ?? "",
+      decision.visibility,
+    );
   }
 
-  const publishPlan = planTeamPublish(
-    [...teamResponseIds.entries()].map(([key, ids]) => ({
-      key,
-      count: ids.size,
-    })),
-    floor,
-  );
+  const publishPlan = decision.plan;
   const namedKeys = new Set(publishPlan.namedKeys);
   const suppressedKeys = new Set(publishPlan.suppressedKeys);
 
@@ -595,13 +705,13 @@ export async function getSurveyResults(
     teams: teamSummaries,
     questions: questionResults,
     role,
-    roleVisibility: role ? "shown" : "all",
+    roleVisibility: decision.visibility,
   };
 }
 
 export async function getPublishedComments(
   token: string,
-  options?: { role?: string | null },
+  options?: { role?: string | null; floor?: number },
 ): Promise<WrittenComment[] | null> {
   const [survey] = await db
     .select()
@@ -630,27 +740,22 @@ export async function getPublishedComments(
     .where(surveyResponsesWhere(survey.id, role));
 
   const teamResponseIds = new Map<string, Set<string>>();
-  const responseIds = new Set<string>();
   for (const row of rows) {
-    responseIds.add(row.responseId);
     const key = teamPublishKey(row.teamId);
     const set = teamResponseIds.get(key) ?? new Set<string>();
     set.add(row.responseId);
     teamResponseIds.set(key, set);
   }
 
-  const floor = anonymityMinimum(await getAnonymityFloor());
-  if (role && responseIds.size < floor) {
+  const floor = await resolveAnonymityFloor(options?.floor);
+  const roleCounts = new Map(
+    [...teamResponseIds.entries()].map(([key, ids]) => [key, ids.size]),
+  );
+  const decision = await publishPlanForSurvey(survey.id, role, floor, roleCounts);
+  if (!decision.plan) {
     return [];
   }
-
-  const plan = planTeamPublish(
-    [...teamResponseIds.entries()].map(([key, ids]) => ({
-      key,
-      count: ids.size,
-    })),
-    floor,
-  );
+  const plan = decision.plan;
 
   const drafts: {
     question: string;

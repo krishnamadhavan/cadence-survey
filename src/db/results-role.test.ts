@@ -9,7 +9,6 @@ import {
   getSurveyResults,
   SUPPRESSED_TEAM_NAME,
 } from "@/db/results";
-import { getAnonymityFloor } from "@/db/settings";
 import {
   answers,
   employees,
@@ -29,11 +28,13 @@ const directorRole = `Director ${stamp}`;
 const oldRole = `Old Role ${stamp}`;
 const mainToken = `role-report-${stamp}`;
 const foldToken = `role-fold-${stamp}`;
+const splitToken = `role-split-${stamp}`;
+const mixToken = `role-mix-${stamp}`;
 const prevToken = `role-prev-${stamp}`;
 const submitToken = `role-submit-${stamp}`;
 
 test("role filter keeps the anonymity floor for each role", async (t) => {
-  const tokens = [mainToken, foldToken, prevToken, submitToken];
+  const tokens = [mainToken, foldToken, splitToken, mixToken, prevToken, submitToken];
   const teamIds: string[] = [];
   const employeeIds: string[] = [];
 
@@ -49,11 +50,7 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     await redis.quit();
   });
 
-  const configured = await getAnonymityFloor();
-  const floor =
-    Number.isInteger(configured) && configured >= MIN_TEAM_RESPONSES
-      ? configured
-      : MIN_TEAM_RESPONSES;
+  const floor = MIN_TEAM_RESPONSES;
 
   const large = await insertTeam(`Role Large ${stamp}`, `role-large-${stamp}`);
   const wide = await insertTeam(`Role Wide ${stamp}`, `role-wide-${stamp}`);
@@ -64,7 +61,10 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
   );
   const foldA = await insertTeam(`Role Fold A ${stamp}`, `role-fold-a-${stamp}`);
   const foldB = await insertTeam(`Role Fold B ${stamp}`, `role-fold-b-${stamp}`);
-  teamIds.push(large, wide, small, directors, foldA, foldB);
+  const split = await insertTeam(`Role Split ${stamp}`, `role-split-${stamp}`);
+  const mixA = await insertTeam(`Role Mix A ${stamp}`, `role-mix-a-${stamp}`);
+  const mixB = await insertTeam(`Role Mix B ${stamp}`, `role-mix-b-${stamp}`);
+  teamIds.push(large, wide, small, directors, foldA, foldB, split, mixA, mixB);
 
   employeeIds.push(
     ...(await insertPeople(large, [
@@ -165,7 +165,7 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     textQuestionId: mainText,
   });
 
-  const everyone = await getSurveyResults(mainToken);
+  const everyone = await getSurveyResults(mainToken, { floor });
   assert.ok(everyone);
   assert.equal(everyone.role, null);
   assert.equal(everyone.roleVisibility, "all");
@@ -183,7 +183,7 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     false,
   );
 
-  const unfilteredComments = await getPublishedComments(mainToken);
+  const unfilteredComments = await getPublishedComments(mainToken, { floor });
   assert.ok(unfilteredComments);
   const unfilteredText = unfilteredComments.map((comment) => comment.text);
   assert.ok(unfilteredText.includes("eng-large"));
@@ -193,7 +193,10 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
   assert.equal(unfilteredText.includes("director-secret"), false);
   assert.equal(unfilteredText.includes("old-role-secret"), false);
 
-  const engineers = await getSurveyResults(mainToken, { role: engineerRole });
+  const engineers = await getSurveyResults(mainToken, {
+    role: engineerRole,
+    floor,
+  });
   assert.ok(engineers);
   assert.equal(engineers.roleVisibility, "shown");
   assert.equal(engineers.role, engineerRole);
@@ -213,27 +216,51 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
   );
   const engineerComments = await getPublishedComments(mainToken, {
     role: engineerRole,
+    floor,
   });
   assert.ok(engineerComments);
   const engineerText = engineerComments.map((comment) => comment.text);
   assert.deepEqual(engineerText, ["eng-large"]);
 
-  const designers = await getSurveyResults(mainToken, { role: `  ${designerRole}  ` });
+  const designers = await getSurveyResults(mainToken, {
+    role: `  ${designerRole}  `,
+    floor,
+  });
   assert.ok(designers);
   assert.equal(designers.role, designerRole);
   assert.equal(designers.roleVisibility, "shown");
+  assert.equal(designers.survey.responseCount, floor * 2);
+  assert.equal(designers.survey.averageScore, 1);
   assert.equal(
-    designers.teams.find((team) => team.teamName === `Role Large ${stamp}`)
-      ?.averageScore,
-    1,
+    designers.teams.some((team) => team.teamName === `Role Large ${stamp}`),
+    false,
   );
   assert.equal(
-    designers.teams.find((team) => team.teamName === `Role Large ${stamp}`)
-      ?.responseCount,
+    designers.teams.some((team) => team.teamName === `Role Wide ${stamp}`),
+    false,
+  );
+  assert.equal(
+    designers.teams.every((team) => team.teamName === SUPPRESSED_TEAM_NAME),
+    true,
+  );
+  const designerComments = await getPublishedComments(mainToken, {
+    role: designerRole,
     floor,
+  });
+  assert.ok(designerComments);
+  assert.deepEqual(
+    designerComments.map((comment) => comment.text),
+    [],
   );
+  const designerGap = unfilteredText.filter(
+    (text) => !designerComments.some((comment) => comment.text === text),
+  );
+  assert.notDeepEqual(designerGap, ["designer-large"]);
 
-  const directorsOnly = await getSurveyResults(mainToken, { role: directorRole });
+  const directorsOnly = await getSurveyResults(mainToken, {
+    role: directorRole,
+    floor,
+  });
   assert.ok(directorsOnly);
   assert.equal(directorsOnly.roleVisibility, "hidden");
   assert.equal(directorsOnly.survey.responseCount, 0);
@@ -244,9 +271,12 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     assert.equal(question.scale?.count ?? 0, 0);
     assert.equal(question.text?.count ?? 0, 0);
   }
-  assert.deepEqual(await getPublishedComments(mainToken, { role: directorRole }), []);
+  assert.deepEqual(
+    await getPublishedComments(mainToken, { role: directorRole, floor }),
+    [],
+  );
 
-  const missing = await getSurveyResults(mainToken, { role: "Nope" });
+  const missing = await getSurveyResults(mainToken, { role: "Nope", floor });
   assert.ok(missing);
   assert.equal(missing.roleVisibility, "empty");
   assert.equal(missing.survey.responseCount, 0);
@@ -276,7 +306,10 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     scaleQuestionId: foldScale,
     textQuestionId: foldText,
   });
-  const folded = await getSurveyResults(foldToken, { role: engineerRole });
+  const folded = await getSurveyResults(foldToken, {
+    role: engineerRole,
+    floor,
+  });
   assert.ok(folded);
   assert.equal(folded.roleVisibility, "shown");
   assert.equal(folded.survey.responseCount, floor + 1);
@@ -289,7 +322,10 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     folded.teams.some((team) => team.responseCount === floor),
     false,
   );
-  const foldComments = await getPublishedComments(foldToken, { role: engineerRole });
+  const foldComments = await getPublishedComments(foldToken, {
+    role: engineerRole,
+    floor,
+  });
   assert.ok(foldComments);
   assert.equal(
     foldComments.some((comment) => comment.text === "fold-named"),
@@ -299,6 +335,163 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     foldComments.some((comment) => comment.text === "fold-secret"),
     false,
   );
+
+  const splitId = await insertSurvey(splitToken, "open");
+  const splitScale = await insertQuestion(splitId, "scale", "Split week?", 1);
+  const splitText = await insertQuestion(splitId, "text", "Split note?", 2);
+  await addResponses({
+    surveyId: splitId,
+    teamId: split,
+    role: engineerRole,
+    count: floor,
+    score: 5,
+    comment: "split-eng",
+    scaleQuestionId: splitScale,
+    textQuestionId: splitText,
+  });
+  await addResponses({
+    surveyId: splitId,
+    teamId: split,
+    role: designerRole,
+    count: 1,
+    score: 1,
+    comment: "split-designer",
+    scaleQuestionId: splitScale,
+    textQuestionId: splitText,
+  });
+  const splitAll = await getSurveyResults(splitToken, { floor });
+  assert.ok(splitAll);
+  const splitTeam = splitAll.teams.find(
+    (team) => team.teamName === `Role Split ${stamp}`,
+  );
+  assert.ok(splitTeam);
+  assert.equal(splitTeam.responseCount, floor + 1);
+  assert.equal(splitTeam.averageScore, 4);
+  const splitEngineers = await getSurveyResults(splitToken, {
+    role: engineerRole,
+    floor,
+  });
+  assert.ok(splitEngineers);
+  assert.equal(splitEngineers.roleVisibility, "withheld");
+  assert.equal(splitEngineers.survey.responseCount, 0);
+  assert.equal(splitEngineers.survey.averageScore, null);
+  assert.equal(splitEngineers.teams.length, 0);
+  for (const question of splitEngineers.questions) {
+    assert.equal(question.scale?.average ?? null, null);
+    assert.equal(question.scale?.count ?? 0, 0);
+    assert.equal(question.scale?.byTeam.length ?? 0, 0);
+    assert.equal(question.text?.count ?? 0, 0);
+  }
+  const splitAllComments = await getPublishedComments(splitToken, { floor });
+  const splitEngineerComments = await getPublishedComments(splitToken, {
+    role: engineerRole,
+    floor,
+  });
+  assert.ok(splitAllComments);
+  assert.ok(splitEngineerComments);
+  const splitAllText = splitAllComments.map((comment) => comment.text);
+  const splitEngineerText = splitEngineerComments.map((comment) => comment.text);
+  assert.ok(splitAllText.includes("split-eng"));
+  assert.ok(splitAllText.includes("split-designer"));
+  assert.equal(splitEngineerText.includes("split-eng"), false);
+  assert.equal(splitEngineerText.includes("split-designer"), false);
+  const splitGap = splitAllText.filter((text) => !splitEngineerText.includes(text));
+  assert.notDeepEqual(splitGap, ["split-designer"]);
+  const splitAtHigherFloor = await getSurveyResults(splitToken, {
+    role: engineerRole,
+    floor: 5,
+  });
+  assert.ok(splitAtHigherFloor);
+  assert.equal(splitAtHigherFloor.roleVisibility, "hidden");
+  assert.equal(splitAtHigherFloor.survey.responseCount, 0);
+  const splitDetail = await getSurveyReportDetail(splitToken, engineerRole, floor);
+  assert.ok(splitDetail);
+  assert.equal(splitDetail.results.roleVisibility, "withheld");
+  const splitCycle = splitDetail.cycles.find(
+    (cycle) => cycle.publicToken === splitToken,
+  );
+  assert.equal(splitCycle?.responseCount, 0);
+  assert.equal(splitCycle?.averageScore, null);
+  assert.equal(splitCycle?.participation, null);
+
+  const mixId = await insertSurvey(mixToken, "open");
+  const mixScale = await insertQuestion(mixId, "scale", "Mix week?", 1);
+  const mixText = await insertQuestion(mixId, "text", "Mix note?", 2);
+  await addResponses({
+    surveyId: mixId,
+    teamId: mixA,
+    role: engineerRole,
+    count: floor,
+    score: 5,
+    comment: "mix-a-eng",
+    scaleQuestionId: mixScale,
+    textQuestionId: mixText,
+  });
+  await addResponses({
+    surveyId: mixId,
+    teamId: mixA,
+    role: designerRole,
+    count: 1,
+    score: 1,
+    comment: "mix-a-des",
+    scaleQuestionId: mixScale,
+    textQuestionId: mixText,
+  });
+  await addResponses({
+    surveyId: mixId,
+    teamId: mixB,
+    role: engineerRole,
+    count: 5,
+    score: 5,
+    comment: "mix-b-eng",
+    scaleQuestionId: mixScale,
+    textQuestionId: mixText,
+  });
+  await addResponses({
+    surveyId: mixId,
+    teamId: mixB,
+    role: designerRole,
+    count: 5,
+    score: 1,
+    comment: "mix-b-des",
+    scaleQuestionId: mixScale,
+    textQuestionId: mixText,
+  });
+  const mixEngineers = await getSurveyResults(mixToken, {
+    role: engineerRole,
+    floor,
+  });
+  assert.ok(mixEngineers);
+  assert.equal(mixEngineers.roleVisibility, "shown");
+  assert.equal(mixEngineers.survey.responseCount, floor + 5);
+  assert.equal(
+    mixEngineers.teams.some((team) => team.teamName === `Role Mix A ${stamp}`),
+    false,
+  );
+  assert.equal(
+    mixEngineers.teams.some((team) => team.responseCount === floor),
+    false,
+  );
+  for (const question of mixEngineers.questions) {
+    for (const team of question.scale?.byTeam ?? []) {
+      assert.notEqual(team.count, floor);
+    }
+  }
+  const mixAllComments = await getPublishedComments(mixToken, { floor });
+  const mixEngineerComments = await getPublishedComments(mixToken, {
+    role: engineerRole,
+    floor,
+  });
+  assert.ok(mixAllComments);
+  assert.ok(mixEngineerComments);
+  const mixAllText = mixAllComments.map((comment) => comment.text);
+  const mixEngineerText = mixEngineerComments.map((comment) => comment.text);
+  assert.ok(mixAllText.includes("mix-a-des"));
+  assert.equal(mixEngineerText.includes("mix-a-eng"), false);
+  const mixGap = mixAllText.filter((text) => !mixEngineerText.includes(text));
+  assert.ok(mixGap.includes("mix-a-eng"));
+  assert.ok(mixGap.includes("mix-a-des"));
+  assert.notDeepEqual(mixGap, ["mix-a-des"]);
 
   const prevId = await insertSurvey(prevToken, "closed");
   const prevScale = await insertQuestion(prevId, "scale", "Previous week?", 1);
@@ -312,7 +505,7 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
     textQuestionId: prevScale,
   });
 
-  const hiddenDetail = await getSurveyReportDetail(mainToken, directorRole);
+  const hiddenDetail = await getSurveyReportDetail(mainToken, directorRole, floor);
   assert.ok(hiddenDetail);
   assert.equal(hiddenDetail.results.roleVisibility, "hidden");
   assert.equal(hiddenDetail.employeeCount, 2);
@@ -323,7 +516,11 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
   assert.equal(hiddenCycle?.participation, null);
   assert.equal(hiddenCycle?.responseCount, 0);
 
-  const engineerDetail = await getSurveyReportDetail(mainToken, ` ${engineerRole} `);
+  const engineerDetail = await getSurveyReportDetail(
+    mainToken,
+    ` ${engineerRole} `,
+    floor,
+  );
   assert.ok(engineerDetail);
   assert.equal(engineerDetail.role, engineerRole);
   const previousEngineers = engineerDetail.cycles.find(

@@ -125,6 +125,7 @@ export async function listReportSurveys(): Promise<ReportListItem[]> {
 export async function getSurveyReportDetail(
   token: string,
   roleInput?: string | null,
+  floor?: number,
 ): Promise<SurveyReportDetail | null> {
   const role = normalizeReportRole(roleInput);
   const [surveyRows, employeeCount, roles] = await Promise.all([
@@ -139,9 +140,9 @@ export async function getSurveyReportDetail(
 
   const { cycles, previous } = pickPreviousCycle(surveyRows, selected.publicToken);
   const [results, previousResults] = await Promise.all([
-    getSurveyResults(selected.publicToken, { role }),
+    getSurveyResults(selected.publicToken, { role, floor }),
     previous
-      ? getSurveyResults(previous.publicToken, { role })
+      ? getSurveyResults(previous.publicToken, { role, floor })
       : Promise.resolve(null),
   ]);
   if (!results) {
@@ -156,7 +157,7 @@ export async function getSurveyReportDetail(
               ? results
               : cycle.publicToken === previous?.publicToken
                 ? previousResults
-                : await getSurveyResults(cycle.publicToken, { role });
+                : await getSurveyResults(cycle.publicToken, { role, floor });
           return roleCycle(cycle, cycleResults, employeeCount);
         }),
       )
@@ -183,7 +184,8 @@ function roleCycle(
   if (
     !result ||
     result.roleVisibility === "hidden" ||
-    result.roleVisibility === "empty"
+    result.roleVisibility === "empty" ||
+    result.roleVisibility === "withheld"
   ) {
     return {
       ...cycle,

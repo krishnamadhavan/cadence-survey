@@ -51,6 +51,12 @@ export async function GET(
         { status: 404 },
       );
     }
+    if (results.roleVisibility === "withheld") {
+      return NextResponse.json(
+        { error: "That role cannot be exported on its own." },
+        { status: 404 },
+      );
+    }
 
     const comments = (await getPublishedComments(token, { role })) ?? [];
     const filename = resultsFilename(results.survey.publicToken, format, role);
