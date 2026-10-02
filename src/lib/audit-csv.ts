@@ -5,6 +5,7 @@ const actionLabel: Record<string, string> = {
   "admin.removed": "Admin removed",
   "manager.assigned": "Manager assigned",
   "manager.unassigned": "Manager unassigned",
+  "manager.portal_password_set": "Portal password set",
   "api_key.created": "API key created",
   "api_key.revoked": "API key revoked",
   "anonymity_floor.changed": "Anonymity floor",

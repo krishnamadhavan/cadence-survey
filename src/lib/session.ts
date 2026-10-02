@@ -4,8 +4,11 @@ import {
   SESSION_TTL_SECONDS,
   SessionStoreUnavailable,
   createAdminSession as createStoredSession,
+  createManagerSession as createStoredManagerSession,
   destroyAdminSession as destroyStoredSession,
+  destroyManagerSession as destroyStoredManagerSession,
   readAdminSession as readStoredSession,
+  readManagerSession as readStoredManagerSession,
   sessionKey,
   type SessionStore,
 } from "@/lib/session-store";
@@ -18,6 +21,7 @@ export {
 };
 
 export const SESSION_COOKIE = "cadence_session";
+export const MANAGER_SESSION_COOKIE = "cadence_manager";
 
 export function sessionCookieOptions() {
   return {
@@ -58,12 +62,41 @@ export async function destroyAdminSession(
 }
 
 export async function destroySessionsForAdmin(adminId: string): Promise<void> {
+  await destroySessionsMatching("session:admin:*", adminId);
+}
+
+export async function createManagerSession(
+  employeeId: string,
+  store: SessionStore = redis,
+): Promise<string> {
+  return createStoredManagerSession(employeeId, store);
+}
+
+export async function readManagerSession(
+  token: string | null | undefined,
+  store: SessionStore = redis,
+): Promise<{ employeeId: string } | null> {
+  return readStoredManagerSession(token, store);
+}
+
+export async function destroyManagerSession(
+  token: string | null | undefined,
+  store: SessionStore = redis,
+): Promise<void> {
+  return destroyStoredManagerSession(token, store);
+}
+
+export async function destroySessionsForManager(employeeId: string): Promise<void> {
+  await destroySessionsMatching("session:manager:*", employeeId);
+}
+
+async function destroySessionsMatching(pattern: string, subjectId: string): Promise<void> {
   let cursor = "0";
   do {
     const [next, keys] = (await redis.scan(
       cursor,
       "MATCH",
-      "session:admin:*",
+      pattern,
       "COUNT",
       100,
     )) as [string, string[]];
@@ -72,7 +105,7 @@ export async function destroySessionsForAdmin(adminId: string): Promise<void> {
       continue;
     }
     const values = await redis.mget(...keys);
-    const stale = keys.filter((key, index) => values[index] === adminId);
+    const stale = keys.filter((key, index) => values[index] === subjectId);
     if (stale.length > 0) {
       await redis.del(...stale);
     }

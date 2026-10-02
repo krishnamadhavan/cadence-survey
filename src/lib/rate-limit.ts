@@ -1,4 +1,9 @@
-import { adminLoginEmailKey, adminLoginIpKey } from "@/lib/login-keys";
+import {
+  adminLoginEmailKey,
+  adminLoginIpKey,
+  managerLoginEmailKey,
+  managerLoginIpKey,
+} from "@/lib/login-keys";
 import { redis } from "@/lib/redis";
 
 const WINDOW_SECONDS = 10 * 60;
@@ -53,6 +58,26 @@ export async function limitAdminLogin(
   }
 
   return hitLimit(adminLoginIpKey(ip), LOGIN_IP_MAX_HITS, LOGIN_WINDOW_SECONDS);
+}
+
+export async function limitManagerLogin(
+  email: string,
+  ip: string,
+): Promise<RateLimitResult> {
+  const emailLimit = await hitLimit(
+    managerLoginEmailKey(email),
+    LOGIN_MAX_HITS,
+    LOGIN_WINDOW_SECONDS,
+  );
+  if (!emailLimit.ok) {
+    return emailLimit;
+  }
+
+  if (ip === "direct") {
+    return emailLimit;
+  }
+
+  return hitLimit(managerLoginIpKey(ip), LOGIN_IP_MAX_HITS, LOGIN_WINDOW_SECONDS);
 }
 
 export async function limitSurveySubmit(

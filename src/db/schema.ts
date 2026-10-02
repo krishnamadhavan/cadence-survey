@@ -116,6 +116,16 @@ export const teamManagers = pgTable(
   (table) => [index("team_managers_employee_id_idx").on(table.employeeId)],
 );
 
+export const managerAccounts = pgTable("manager_accounts", {
+  employeeId: uuid("employee_id")
+    .primaryKey()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const surveys = pgTable("surveys", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull(),
@@ -192,6 +202,10 @@ export const employeesRelations = relations(employees, ({ one }) => ({
   team: one(teams, {
     fields: [employees.teamId],
     references: [teams.id],
+  }),
+  managerAccount: one(managerAccounts, {
+    fields: [employees.id],
+    references: [managerAccounts.employeeId],
   }),
 }));
 

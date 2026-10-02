@@ -29,4 +29,8 @@ test("audit csv lists who did what and when, newest first as given", () => {
     '2026-03-01T10:00:00.000Z,"ada, admin@cadence.test",Admin added,"\'=HYPERLINK(""http://evil"")"',
   );
   assert.equal(auditActionLabel("unknown.action"), "unknown.action");
+  assert.equal(
+    auditActionLabel("manager.portal_password_set"),
+    "Portal password set",
+  );
 });
