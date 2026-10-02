@@ -73,7 +73,10 @@ test("a personal link can be used once and the answer stays anonymous", async (t
     assert.deepEqual(Object.keys(link).sort(), ["email", "name", "token"]);
   }
 
-  await db.update(employees).set({ teamId: beta }).where(eq(employees.id, ada.id));
+  await db
+    .update(employees)
+    .set({ teamId: beta, tenureBand: "gte_3" })
+    .where(eq(employees.id, ada.id));
 
   const phrase = `private-note-${stamp}`;
   const first = await submitSurveyResponse(
@@ -93,6 +96,7 @@ test("a personal link can be used once and the answer stays anonymous", async (t
     .where(eq(responses.id, first.responseId));
   assert.ok(response);
   assert.equal(response.teamId, beta);
+  assert.equal(response.tenureBand, "gte_3");
   assert.equal(Object.hasOwn(response, "employeeId"), false);
 
   const [spent] = await db.select().from(pulseLinks).where(eq(pulseLinks.token, adaLink.token));

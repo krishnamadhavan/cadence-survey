@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { employees, pulseLinks, surveys } from "@/db/schema";
+import type { TenureBand } from "@/lib/employee-attributes";
 
 type LinkDb = Pick<typeof db, "insert" | "select" | "update">;
 
@@ -133,14 +134,15 @@ export async function readPulseLink(
   return row ?? null;
 }
 
-// Marks the link spent and returns the person's current team.
-// Callers must insert the response in the same transaction. The team id is
-// the only fact that leaves this function; the employee id does not.
+// Marks the link spent and returns the person's current team and tenure band.
+// Callers must insert the response in the same transaction. The team id and
+// the tenure band are the only facts that leave this function; the employee
+// id does not.
 export async function takePulseLink(
   tx: LinkDb,
   surveyId: string,
   code: string,
-): Promise<{ teamId: string }> {
+): Promise<{ teamId: string; tenureBand: TenureBand | null }> {
   const normalized = code.trim();
   if (!normalized || normalized.length > 64) {
     throw new PulseLinkError("missing");
@@ -164,7 +166,7 @@ export async function takePulseLink(
   }
 
   const [person] = await tx
-    .select({ teamId: employees.teamId })
+    .select({ teamId: employees.teamId, tenureBand: employees.tenureBand })
     .from(employees)
     .where(eq(employees.id, link.employeeId))
     .limit(1);
@@ -181,5 +183,5 @@ export async function takePulseLink(
     throw new PulseLinkError("used");
   }
 
-  return { teamId: person.teamId };
+  return { teamId: person.teamId, tenureBand: person.tenureBand };
 }
