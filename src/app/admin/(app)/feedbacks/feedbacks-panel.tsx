@@ -87,12 +87,23 @@ export function FeedbacksPanel({
 
   return (
     <>
-      <div className="min-w-0">
-        <h1 className="font-serif text-4xl text-ink">Feedbacks</h1>
-        <p className="mt-2 text-ink/60">
-          Written answers from open and closed pulses. Teams under the
-          anonymity floor are left out.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-serif text-4xl text-ink">Feedbacks</h1>
+          <p className="mt-2 text-ink/60">
+            Written answers from open and closed pulses. Teams under the
+            anonymity floor are left out. The CSV is the whole list, grouped
+            by team.
+          </p>
+        </div>
+        {dbError ? null : (
+          <a
+            href="/api/admin/feedbacks"
+            className="inline-flex h-10 shrink-0 items-center rounded-full border border-ink/15 px-4 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            Download CSV
+          </a>
+        )}
       </div>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
