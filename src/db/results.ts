@@ -1,6 +1,7 @@
 import { and, asc, count, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
+import { applyDueSurveySchedules } from "@/db/surveys";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { ChoiceOptions, QuestionType, ScaleOptions } from "@/db/schema";
 import { parseRole, ROLE_MAX_LENGTH } from "@/lib/employee-attributes";
@@ -84,6 +85,9 @@ export type SurveyResults = {
     title: string;
     publicToken: string;
     status: string;
+    opensAt: string | null;
+    closesAt: string | null;
+    cadence: "weekly" | "biweekly" | "monthly" | null;
     responseCount: number;
     averageScore: number | null;
   };
@@ -415,6 +419,9 @@ function redactedSurveyResults(
     title: string;
     publicToken: string;
     status: string;
+    opensAt: Date | null;
+    closesAt: Date | null;
+    cadence: "weekly" | "biweekly" | "monthly" | null;
   },
   surveyQuestions: Parameters<typeof emptyQuestion>[0][],
   role: string,
@@ -426,6 +433,9 @@ function redactedSurveyResults(
       title: survey.title,
       publicToken: survey.publicToken,
       status: survey.status,
+      opensAt: survey.opensAt?.toISOString() ?? null,
+      closesAt: survey.closesAt?.toISOString() ?? null,
+      cadence: survey.cadence,
       responseCount: 0,
       averageScore: null,
     },
@@ -440,6 +450,7 @@ export async function getSurveyResults(
   token: string,
   options?: { role?: string | null; floor?: number },
 ): Promise<SurveyResults | null> {
+  await applyDueSurveySchedules();
   const [survey] = await db
     .select()
     .from(surveys)
@@ -699,6 +710,9 @@ export async function getSurveyResults(
       title: survey.title,
       publicToken: survey.publicToken,
       status: survey.status,
+      opensAt: survey.opensAt?.toISOString() ?? null,
+      closesAt: survey.closesAt?.toISOString() ?? null,
+      cadence: survey.cadence,
       responseCount: responseMeta.size,
       averageScore: average(allScaleValues),
     },

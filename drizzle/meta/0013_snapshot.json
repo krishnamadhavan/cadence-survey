@@ -1,6 +1,6 @@
 {
-  "id": "1d225d38-9923-490b-a78f-a075c0c357df",
-  "prevId": "fdf0890a-c921-4710-a690-3a0c96afafe2",
+  "id": "3a84b61a-12cb-462a-b992-abcb71810008",
+  "prevId": "ed396538-e63b-4baa-9b16-a51e95b4d494",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -442,6 +442,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tenure_band": {
+          "name": "tenure_band",
+          "type": "employee_tenure_band",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -492,6 +505,52 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.manager_accounts": {
+      "name": "manager_accounts",
+      "schema": "",
+      "columns": {
+        "employee_id": {
+          "name": "employee_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "manager_accounts_employee_id_employees_id_fk": {
+          "name": "manager_accounts_employee_id_employees_id_fk",
+          "tableFrom": "manager_accounts",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employee_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -606,6 +665,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "submitted_at": {
           "name": "submitted_at",
           "type": "timestamp with time zone",
@@ -635,6 +700,27 @@
           "columns": [
             {
               "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "responses_survey_role_idx": {
+          "name": "responses_survey_role_idx",
+          "columns": [
+            {
+              "expression": "survey_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1061,7 +1147,17 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.employee_tenure_band": {
+      "name": "employee_tenure_band",
+      "schema": "public",
+      "values": [
+        "lt_1",
+        "y1_3",
+        "gte_3"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

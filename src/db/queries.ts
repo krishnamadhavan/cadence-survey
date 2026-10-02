@@ -1,5 +1,6 @@
 import { asc, count, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db/client";
+import { applyDueSurveySchedules } from "@/db/surveys";
 import { employees, questions, responses, surveys, teams } from "@/db/schema";
 import type { QuestionType, SurveyStatus } from "@/db/schema";
 
@@ -9,6 +10,9 @@ export type AdminSurveyListItem = {
   description: string | null;
   publicToken: string;
   status: SurveyStatus;
+  opensAt: string | null;
+  closesAt: string | null;
+  cadence: "weekly" | "biweekly" | "monthly" | null;
   createdAt: string;
   responseCount: number;
   questionCount: number;
@@ -48,6 +52,7 @@ export async function getOpenSurveys() {
 export async function getSurveyByToken(
   token: string,
 ): Promise<PublicSurvey | null> {
+  await applyDueSurveySchedules();
   const [survey] = await db
     .select()
     .from(surveys)
@@ -118,6 +123,7 @@ export async function listTeams() {
 }
 
 export async function listSurveysForAdmin(): Promise<AdminSurveyListItem[]> {
+  await applyDueSurveySchedules();
   const [rows, responseRows, questionRows] = await Promise.all([
     db
       .select({
@@ -126,6 +132,9 @@ export async function listSurveysForAdmin(): Promise<AdminSurveyListItem[]> {
         description: surveys.description,
         publicToken: surveys.publicToken,
         status: surveys.status,
+        opensAt: surveys.opensAt,
+        closesAt: surveys.closesAt,
+        cadence: surveys.cadence,
         createdAt: surveys.createdAt,
       })
       .from(surveys)
@@ -156,6 +165,9 @@ export async function listSurveysForAdmin(): Promise<AdminSurveyListItem[]> {
   return rows.map((survey) => ({
     ...survey,
     createdAt: survey.createdAt.toISOString(),
+    opensAt: survey.opensAt?.toISOString() ?? null,
+    closesAt: survey.closesAt?.toISOString() ?? null,
+    cadence: survey.cadence,
     responseCount: responsesBySurvey.get(survey.id) ?? 0,
     questionCount: questionsBySurvey.get(survey.id) ?? 0,
   }));

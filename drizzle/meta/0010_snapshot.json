@@ -1,5 +1,5 @@
 {
-  "id": "3e0c793e-f9a6-416c-8478-8bab5fe1cc3c",
+  "id": "fdf0890a-c921-4710-a690-3a0c96afafe2",
   "prevId": "48590b04-318e-4a93-a94b-8d748c6fcd10",
   "version": "7",
   "dialect": "postgresql",
@@ -442,19 +442,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tenure_band": {
-          "name": "tenure_band",
-          "type": "employee_tenure_band",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -776,6 +763,18 @@
           "notNull": true,
           "default": "'draft'"
         },
+        "opens_at": {
+          "name": "opens_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closes_at": {
+          "name": "closes_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1037,17 +1036,7 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {
-    "public.employee_tenure_band": {
-      "name": "employee_tenure_band",
-      "schema": "public",
-      "values": [
-        "lt_1",
-        "y1_3",
-        "gte_3"
-      ]
-    }
-  },
+  "enums": {},
   "schemas": {},
   "sequences": {},
   "roles": {},

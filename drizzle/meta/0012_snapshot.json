@@ -1,6 +1,6 @@
 {
-  "id": "1d225d38-9923-490b-a78f-a075c0c357df",
-  "prevId": "fdf0890a-c921-4710-a690-3a0c96afafe2",
+  "id": "ed396538-e63b-4baa-9b16-a51e95b4d494",
+  "prevId": "1d225d38-9923-490b-a78f-a075c0c357df",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -492,6 +492,52 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.manager_accounts": {
+      "name": "manager_accounts",
+      "schema": "",
+      "columns": {
+        "employee_id": {
+          "name": "employee_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "manager_accounts_employee_id_employees_id_fk": {
+          "name": "manager_accounts_employee_id_employees_id_fk",
+          "tableFrom": "manager_accounts",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employee_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

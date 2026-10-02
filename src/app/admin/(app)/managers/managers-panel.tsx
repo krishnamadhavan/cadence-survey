@@ -6,6 +6,7 @@ import type { EmployeeListItem } from "@/db/employees";
 import type { ManagerAssignment } from "@/db/managers";
 import {
   assignManagerAction,
+  setManagerPortalPasswordAction,
   unassignManagerAction,
   type ManagerActionState,
 } from "./actions";
@@ -99,7 +100,11 @@ export function ManagersPanel({ assignments, people, dbError }: ManagersPanelPro
         <h1 className="font-serif text-4xl text-ink">Managers</h1>
         <p className="mt-2 text-ink/60">
           Who leads each team. One manager per team. A person can lead more
-          than one.
+          than one. A portal password lets that person sign in at{" "}
+          <Link href="/manage/login" className="underline-offset-4 hover:underline">
+            /manage/login
+          </Link>
+          .
         </p>
       </div>
 
@@ -185,13 +190,19 @@ export function ManagersPanel({ assignments, people, dbError }: ManagersPanelPro
                     <tr key={row.teamId} className="border-t border-ink/5 align-top">
                       <td className="px-4 py-3 font-medium text-ink">{row.teamName}</td>
                       <td className="px-4 py-3 text-ink/70">
-                        {row.employeeName ? (
+                        {row.employeeId && row.employeeName ? (
                           <>
                             <span className="text-ink">{row.employeeName}</span>
                             <span className="mt-0.5 block text-xs text-ink/45">
                               {row.employeeEmail}
                               {row.homeTeamName ? ` · ${row.homeTeamName}` : ""}
                             </span>
+                            <PortalPasswordForm
+                              employeeId={row.employeeId}
+                              employeeName={row.employeeName}
+                              hasPortal={row.hasPortal}
+                              fieldId={`${row.teamId}-${row.employeeId}`}
+                            />
                           </>
                         ) : (
                           <span className="text-ink/40">Unassigned</span>
@@ -343,5 +354,56 @@ function AssignForm({
         <p className="text-xs text-rose-800">{assignState?.error ?? clearState?.error}</p>
       ) : null}
     </div>
+  );
+}
+
+function PortalPasswordForm({
+  employeeId,
+  employeeName,
+  hasPortal,
+  fieldId,
+}: {
+  employeeId: string;
+  employeeName: string;
+  hasPortal: boolean;
+  fieldId: string;
+}) {
+  const [state, action, pending] = useActionState<ManagerActionState, FormData>(
+    setManagerPortalPasswordAction,
+    null,
+  );
+
+  return (
+    <form action={action} className="mt-2 flex flex-col gap-1.5">
+      <input type="hidden" name="employeeId" value={employeeId} />
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="sr-only" htmlFor={`portal-password-${fieldId}`}>
+          Portal password for {employeeName}
+        </label>
+        <input
+          id={`portal-password-${fieldId}`}
+          type="password"
+          name="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          placeholder="Portal password"
+          className="h-8 w-40 rounded-full border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30"
+        />
+        <button
+          type="submit"
+          disabled={pending}
+          className="inline-flex h-8 items-center rounded-full border border-ink/10 px-3 text-sm text-ink transition-colors hover:bg-ink/5 disabled:opacity-50"
+        >
+          {pending ? "Saving…" : hasPortal ? "Reset password" : "Set password"}
+        </button>
+      </div>
+      {hasPortal || state?.ok ? (
+        <p className="text-xs text-ink/45">Portal sign-in is on.</p>
+      ) : (
+        <p className="text-xs text-ink/45">No portal sign-in yet.</p>
+      )}
+      {state?.error ? <p className="text-xs text-rose-800">{state.error}</p> : null}
+    </form>
   );
 }
