@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
+import { applyDueSurveySchedules } from "@/db/surveys";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { ChoiceOptions, QuestionType, ScaleOptions } from "@/db/schema";
 import {
@@ -73,6 +74,9 @@ export type SurveyResults = {
     title: string;
     publicToken: string;
     status: string;
+    opensAt: string | null;
+    closesAt: string | null;
+    cadence: "weekly" | "biweekly" | "monthly" | null;
     responseCount: number;
     averageScore: number | null;
   };
@@ -227,6 +231,7 @@ function publishChoiceTeams(
 export async function getSurveyResults(
   token: string,
 ): Promise<SurveyResults | null> {
+  await applyDueSurveySchedules();
   const [survey] = await db
     .select()
     .from(surveys)
@@ -477,6 +482,9 @@ export async function getSurveyResults(
       title: survey.title,
       publicToken: survey.publicToken,
       status: survey.status,
+      opensAt: survey.opensAt?.toISOString() ?? null,
+      closesAt: survey.closesAt?.toISOString() ?? null,
+      cadence: survey.cadence,
       responseCount: responseMeta.size,
       averageScore: average(allScaleValues),
     },

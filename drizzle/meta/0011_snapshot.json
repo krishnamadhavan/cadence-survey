@@ -1,6 +1,6 @@
 {
-  "id": "fdf0890a-c921-4710-a690-3a0c96afafe2",
-  "prevId": "48590b04-318e-4a93-a94b-8d748c6fcd10",
+  "id": "1d225d38-9923-490b-a78f-a075c0c357df",
+  "prevId": "fdf0890a-c921-4710-a690-3a0c96afafe2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -775,6 +775,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cadence": {
+          "name": "cadence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "series_id": {
+          "name": "series_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_survey_id": {
+          "name": "next_survey_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -792,6 +810,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "public_token"
+          ]
+        },
+        "surveys_next_survey_id_unique": {
+          "name": "surveys_next_survey_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "next_survey_id"
           ]
         }
       },
