@@ -1,6 +1,6 @@
 # Cadence
 
-Pulse surveys with a personal link for each employee. Someone opens `/s/<survey>/<code>`, answers a short check-in once, and the response is stored with their team, not their name. Redis rate-limits the submit path.
+Pulse surveys with a personal link for each employee. Someone opens `/s/<survey>/<code>`, answers a short check-in, and can change that answer until the pulse closes. The response is stored with their team, not their name. Redis rate-limits the submit path.
 
 **Stack:** Next.js 16 (App Router) + TypeScript + Drizzle + Postgres 16 + Redis 7.
 
@@ -28,7 +28,7 @@ Employee roster: [http://localhost:3000/admin/employees](http://localhost:3000/a
 
 Health (Postgres + Redis): [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-Submit accepts JSON for one personal link. The code comes from that person's link (`/s/<survey>/<code>`). The team is taken from their roster row. The response does not store who answered, and the same code cannot submit twice. Optional `role` must match a role already set on that team; it is stored as text on the response and is not linked back to a person.
+Submit accepts JSON for one personal link. The code comes from that person's link (`/s/<survey>/<code>`). The team is taken from their roster row on the first submit and kept when they change the answer. The response does not store who answered. Sending again through the same code replaces that one response until the pulse closes. A closed pulse does not accept a change. Optional `role` must match a role already set on the team stored with the response; it is stored as text on the response and is not linked back to a person. A repeat submit may keep the role it already stored.
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/surveys/weekly-pulse/responses \
@@ -94,8 +94,8 @@ Next.js stays on the host so hot reload stays fast on macOS. Compose is the data
 - `teams` — Engineering, Product, Design, Operations (seeded)
 - `employees` — name, email, team, optional role and tenure band; bulk-loaded from CSV on `/admin/employees`
 - `questions` — `scale`, `choice`, or `text`
-- `pulse_links` — one unguessable code per employee per pulse; spent links are not tied to a response row
-- `responses` — one row per submit, with `team_id` and an optional role snapshot (not a link to the employee). Pulse reports can filter by that role. A role or team is only named when it still meets the anonymity floor. A role is also withheld when the people outside that role are too few to stand apart from the full report.
+- `pulse_links` — one unguessable code per employee per pulse. The link stores the response it wrote so that response can be replaced until the pulse closes
+- `responses` — one row per person per pulse, with `team_id` and an optional role snapshot (not a link to the employee). Pulse reports can filter by that role. A role or team is only named when it still meets the anonymity floor. A role is also withheld when the people outside that role are too few to stand apart from the full report.
 - `answers` — jsonb `{ "value": ... }` per question
 
 Scale averages under 3.0 are marked **low**, under 3.5 **watch**. Teams are sorted worst first. A team is only named when it has at least 3 responses; smaller groups are omitted or folded into “Too few to show” so a single person cannot be read off the results.

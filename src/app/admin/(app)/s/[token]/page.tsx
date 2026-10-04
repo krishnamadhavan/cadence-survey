@@ -97,7 +97,7 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-ink/60">
           Each person has one link for this pulse. A response is stored with
-          their team, and the link can be used once.
+          their team, not their name. They can change it until the pulse closes.
         </p>
         {linksError ? (
           <p className="mt-4 text-sm text-ink/70">Could not load personal links.</p>

@@ -1,8 +1,8 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { PulseLinkError, takePulseLink } from "@/db/pulse-links";
 import { getSurveyByToken } from "@/db/queries";
-import { answers, employees, responses } from "@/db/schema";
+import { answers, employees, pulseLinks, responses } from "@/db/schema";
 import type { ChoiceOptions, ScaleOptions } from "@/db/schema";
 import { parseRole } from "@/lib/employee-attributes";
 import { limitSurveySubmit } from "@/lib/rate-limit";
@@ -118,7 +118,14 @@ export async function submitSurveyResponse(
   try {
     const responseId = await db.transaction(async (tx) => {
       const taken = await takePulseLink(tx, survey.id, linkCode);
-      if (role) {
+      // A repeat submit may keep the role already stored. A different role
+      // still has to be one set on the team this response is counted with.
+      const keepingStoredRole =
+        taken.mode === "update" && role != null && role === taken.storedRole;
+      if (role && !keepingStoredRole) {
+        if (!taken.teamId) {
+          throw new RoleSubmitError("Pick a role from your team.");
+        }
         const [match] = await tx
           .select({ role: employees.role })
           .from(employees)
@@ -127,6 +134,28 @@ export async function submitSurveyResponse(
         if (!match) {
           throw new RoleSubmitError("Pick a role from your team.");
         }
+      }
+
+      if (taken.mode === "update") {
+        await tx
+          .update(pulseLinks)
+          .set({ redeemed: true })
+          .where(eq(pulseLinks.id, taken.linkId));
+        await tx
+          .update(responses)
+          .set({ role, submittedAt: new Date() })
+          .where(eq(responses.id, taken.responseId));
+        await tx.delete(answers).where(eq(answers.responseId, taken.responseId));
+        if (parsed.length > 0) {
+          await tx.insert(answers).values(
+            parsed.map((answer) => ({
+              responseId: taken.responseId,
+              questionId: answer.questionId,
+              value: { value: answer.value },
+            })),
+          );
+        }
+        return taken.responseId;
       }
 
       const [response] = await tx
@@ -148,6 +177,21 @@ export async function submitSurveyResponse(
         );
       }
 
+      const [spent] = await tx
+        .update(pulseLinks)
+        .set({ redeemed: true, responseId: response.id })
+        .where(
+          and(
+            eq(pulseLinks.id, taken.linkId),
+            eq(pulseLinks.redeemed, false),
+            isNull(pulseLinks.responseId),
+          ),
+        )
+        .returning({ id: pulseLinks.id });
+      if (!spent) {
+        throw new PulseLinkError("used");
+      }
+
       return response.id;
     });
 
@@ -162,6 +206,13 @@ export async function submitSurveyResponse(
           ok: false,
           status: 409,
           error: "This link was already used.",
+        };
+      }
+      if (error.reason === "closed") {
+        return {
+          ok: false,
+          status: 404,
+          error: "This survey is not accepting responses.",
         };
       }
       return { ok: false, status: 404, error: "This link is not valid." };

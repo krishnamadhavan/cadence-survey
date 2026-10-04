@@ -65,7 +65,7 @@ export default async function PersonalSurveyPage({ params }: PersonalSurveyPageP
     );
   }
 
-  if (link.redeemed) {
+  if (!link.editable) {
     return (
       <Shell title={link.title}>
         <p className="mt-4 text-ink/70">You already sent a response. Thank you.</p>
@@ -78,12 +78,22 @@ export default async function PersonalSurveyPage({ params }: PersonalSurveyPageP
   }
 
   const rolesByTeam = await listEmployeeRolesByTeam();
-  const roles = rolesByTeam.find((entry) => entry.teamId === link.teamId)?.roles ?? [];
+  const teamRoles = rolesByTeam.find((entry) => entry.teamId === link.teamId)?.roles ?? [];
+  const roles =
+    link.role && !teamRoles.includes(link.role) ? [...teamRoles, link.role] : teamRoles;
+  const initialValues = Object.fromEntries(
+    link.answers.map((answer) => [answer.questionId, answer.value]),
+  );
 
   return (
     <Shell title={survey.title} eyebrow="Pulse survey">
       {survey.description ? (
         <p className="mt-3 max-w-xl text-base leading-7 text-ink/70">{survey.description}</p>
+      ) : null}
+      {link.redeemed ? (
+        <p className="mt-3 max-w-xl text-base leading-7 text-ink/70">
+          You can change your answers until this pulse closes.
+        </p>
       ) : null}
       <div className="mt-10">
         <SurveyForm
@@ -91,6 +101,9 @@ export default async function PersonalSurveyPage({ params }: PersonalSurveyPageP
           code={code}
           questions={survey.questions}
           roles={roles}
+          initialValues={initialValues}
+          initialRole={link.role ?? ""}
+          editing={link.redeemed}
         />
       </div>
     </Shell>

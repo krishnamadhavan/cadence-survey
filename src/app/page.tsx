@@ -60,7 +60,7 @@ export default async function Home() {
                       </p>
                     ) : null}
                     <p className="mt-2 text-sm text-ink/50">
-                      Answered through a personal link.
+                      Personal link. Answers can change until the pulse closes.
                     </p>
                   </Link>
                 </li>

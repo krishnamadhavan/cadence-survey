@@ -190,9 +190,10 @@ export const responses = pgTable(
   ],
 );
 
-// A personal answer link. `redeemed` only records that the link was spent.
-// There is no response id and no redeemed time, so the row cannot be joined
-// to what that person wrote. The response itself stores the team, not the employee.
+// One personal link per employee per pulse. `response_id` points at the single
+// response that link wrote, so a later visit can replace it while the pulse
+// is open. The response row stores the team, not the employee. Reports and
+// the admin link list do not read `response_id`. There is no redeemed time.
 export const pulseLinks = pgTable(
   "pulse_links",
   {
@@ -205,6 +206,9 @@ export const pulseLinks = pgTable(
       .references(() => employees.id, { onDelete: "cascade" }),
     token: text("token").notNull().unique(),
     redeemed: boolean("redeemed").notNull().default(false),
+    responseId: uuid("response_id")
+      .unique()
+      .references(() => responses.id, { onDelete: "set null" }),
   },
   (table) => [
     uniqueIndex("pulse_links_survey_employee_idx").on(table.surveyId, table.employeeId),
