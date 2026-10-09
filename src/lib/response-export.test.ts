@@ -18,13 +18,13 @@ test("response csv is one row per named team response", () => {
   ];
   const rows = selectResponseRows(
     [
-      row("a", "eng", "Engineering", 1, [5, "shipped"]),
-      row("b", "eng", "Engineering", 2, [4, null]),
-      row("c", "eng", "Engineering", 3, [5, "=1+1"]),
-      row("d", "des", "Design", 4, [2, "folded-note"]),
-      row("e", "des", "Design", 5, [2, null]),
-      row("f", "des", "Design", 6, [2, null]),
-      row("g", "ops", "Operations", 7, [1, "secret-note"]),
+      row("a", "eng", "Engineering", 1, [5, "shipped"], "Engineer", "<1yr"),
+      row("b", "eng", "Engineering", 2, [4, null], "Engineer", "1-3yr"),
+      row("c", "eng", "Engineering", 3, [5, "=1+1"], "=lead", "3yr+"),
+      row("d", "des", "Design", 4, [2, "folded-note"], "Folder", "<1yr"),
+      row("e", "des", "Design", 5, [2, null], "Folder", "<1yr"),
+      row("f", "des", "Design", 6, [2, null], "Folder", "<1yr"),
+      row("g", "ops", "Operations", 7, [1, "secret-note"], "Solo", "3yr+"),
     ],
     floor,
   );
@@ -33,13 +33,16 @@ test("response csv is one row per named team response", () => {
   assert.equal(rows.rows.length, floor);
   assert.equal(rows.rows.every((line) => line.teamName === "Engineering"), true);
   const csv = buildResponseCsv(questions, rows.rows);
-  assert.match(csv, /Team,How was the week\?,'=notes/);
-  assert.match(csv, /Engineering,5,shipped/);
-  assert.match(csv, /Engineering,5,'=1\+1/);
+  assert.match(csv, /Team,Role,Tenure,How was the week\?,'=notes/);
+  assert.match(csv, /Engineering,Engineer,<1yr,5,shipped/);
+  assert.match(csv, /Engineering,'=lead,3yr\+,5,'=1\+1/);
   assert.equal(csv.includes("Design"), false);
   assert.equal(csv.includes("Operations"), false);
+  assert.equal(csv.includes("Folder"), false);
+  assert.equal(csv.includes("Solo"), false);
   assert.equal(csv.includes("folded-note"), false);
   assert.equal(csv.includes("secret-note"), false);
+  assert.equal(csv.includes(",=lead"), false);
   assert.equal(csv.includes(",=1+1"), false);
 });
 
@@ -91,6 +94,8 @@ function row(
   teamName: string,
   submittedAt: number,
   values: ExportResponse["values"],
+  role: string | null = null,
+  tenure: string | null = null,
 ): ExportResponse {
-  return { id, teamKey, teamName, submittedAt, values };
+  return { id, teamKey, teamName, submittedAt, role, tenure, values };
 }

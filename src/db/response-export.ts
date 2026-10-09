@@ -4,6 +4,7 @@ import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { QuestionType } from "@/db/schema";
 import { getAnonymityFloor } from "@/db/settings";
 import { applyDueSurveySchedules } from "@/db/surveys";
+import { tenureBandLabel } from "@/lib/employee-attributes";
 import { teamPublishKey } from "@/lib/min-cell";
 import {
   anonymityFloor,
@@ -63,6 +64,8 @@ export async function exportClosedResponses(
         submittedAt: responses.submittedAt,
         teamId: responses.teamId,
         teamName: teams.name,
+        role: responses.role,
+        tenureBand: responses.tenureBand,
         questionId: answers.questionId,
         value: answers.value,
       })
@@ -81,6 +84,8 @@ export async function exportClosedResponses(
           submittedAt: row.submittedAt.getTime(),
           teamKey: teamPublishKey(row.teamId),
           teamName: row.teamName ?? UNASSIGNED,
+          role: row.role,
+          tenure: tenureBandLabel(row.tenureBand),
           values: [],
           cells: new Map(),
         };
@@ -101,6 +106,8 @@ export async function exportClosedResponses(
       submittedAt: response.submittedAt,
       teamKey: response.teamKey,
       teamName: response.teamName,
+      role: response.role,
+      tenure: response.tenure,
       values: surveyQuestions.map((question) => response.cells.get(question.id) ?? null),
     }));
     const selected = selectResponseRows(loaded, floor);

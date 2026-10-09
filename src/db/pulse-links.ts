@@ -9,6 +9,7 @@ import {
   surveys,
   type AnswerValue,
 } from "@/db/schema";
+import type { TenureBand } from "@/lib/employee-attributes";
 
 type LinkDb = Pick<typeof db, "insert" | "select" | "update">;
 
@@ -31,7 +32,7 @@ export class PulseLinkError extends Error {
 }
 
 export type ClaimedPulseLink =
-  | { mode: "create"; linkId: string; teamId: string }
+  | { mode: "create"; linkId: string; teamId: string; tenureBand: TenureBand | null }
   | {
       mode: "update";
       linkId: string;
@@ -199,8 +200,8 @@ function answerText(value: AnswerValue): string | null {
 }
 
 // Locks the pulse, then the link. A first submit uses the person's current
-// team. A later submit keeps the team already stored on the response.
-// The employee id does not leave this function.
+// team and tenure band. A later submit keeps the team and tenure already
+// stored on the response. The employee id does not leave this function.
 export async function takePulseLink(
   tx: LinkDb,
   surveyId: string,
@@ -263,7 +264,7 @@ export async function takePulseLink(
   }
 
   const [person] = await tx
-    .select({ teamId: employees.teamId })
+    .select({ teamId: employees.teamId, tenureBand: employees.tenureBand })
     .from(employees)
     .where(eq(employees.id, link.employeeId))
     .limit(1);
@@ -271,5 +272,10 @@ export async function takePulseLink(
     throw new PulseLinkError("missing");
   }
 
-  return { mode: "create", linkId: link.id, teamId: person.teamId };
+  return {
+    mode: "create",
+    linkId: link.id,
+    teamId: person.teamId,
+    tenureBand: person.tenureBand,
+  };
 }

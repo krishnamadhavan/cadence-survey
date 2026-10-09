@@ -8,12 +8,19 @@ export type ExportResponse = {
   submittedAt: number;
   teamKey: string;
   teamName: string;
+  role: string | null;
+  tenure: string | null;
   values: ExportCell[];
 };
 
 export type ResponseExportPlan = {
   state: "empty" | "hidden" | "ready";
-  rows: { teamName: string; values: ExportCell[] }[];
+  rows: {
+    teamName: string;
+    role: string | null;
+    tenure: string | null;
+    values: ExportCell[];
+  }[];
 };
 
 // Named teams only, after the same fold the published report uses. A team
@@ -53,7 +60,12 @@ function rowsForNamedTeams(responses: ExportResponse[], plan: TeamPublishPlan) {
       }
       return a.id.localeCompare(b.id);
     })
-    .map((response) => ({ teamName: response.teamName, values: response.values }));
+    .map((response) => ({
+      teamName: response.teamName,
+      role: response.role,
+      tenure: response.tenure,
+      values: response.values,
+    }));
 }
 
 export function responseQuestionHeaders(
@@ -72,11 +84,16 @@ export function responseQuestionHeaders(
 
 export function buildResponseCsv(
   questions: { prompt: string; position: number }[],
-  rows: { teamName: string; values: ExportCell[] }[],
+  rows: {
+    teamName: string;
+    role: string | null;
+    tenure: string | null;
+    values: ExportCell[];
+  }[],
 ): string {
   const lines = [
-    csvLine(["Team", ...responseQuestionHeaders(questions)]),
-    ...rows.map((row) => csvLine([row.teamName, ...row.values])),
+    csvLine(["Team", "Role", "Tenure", ...responseQuestionHeaders(questions)]),
+    ...rows.map((row) => csvLine([row.teamName, row.role, row.tenure, ...row.values])),
   ];
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }

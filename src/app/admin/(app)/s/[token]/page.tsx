@@ -93,8 +93,9 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           </p>
           {status === "closed" ? (
             <p className="max-w-xs text-right text-xs text-ink/45">
-              One row per response, with the team. A team is included only
-              when the report can name it. Smaller groups are left out.
+              One row per response, with the team, role, and tenure. A team
+              is included only when the report can name it. Smaller groups
+              are left out.
             </p>
           ) : null}
         </div>

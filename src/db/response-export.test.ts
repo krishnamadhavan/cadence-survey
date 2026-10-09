@@ -54,12 +54,14 @@ test("closed pulse exports one row per named team response", async (t) => {
     score: number;
     note: string | null;
     choice: string | null;
+    role: string | null;
+    tenure: "lt_1" | "y1_3" | "gte_3" | null;
   }> = [
-    { score: 5, note: "shipped, today", choice: "Fast" },
-    { score: 4, note: null, choice: null },
-    { score: 5, note: "=1+1", choice: "Slow" },
-    { score: 3, note: null, choice: "Fast" },
-    { score: 5, note: null, choice: null },
+    { score: 5, note: "shipped, today", choice: "Fast", role: "Engineer", tenure: "lt_1" },
+    { score: 4, note: null, choice: null, role: "Engineer", tenure: "y1_3" },
+    { score: 5, note: "=1+1", choice: "Slow", role: "Designer", tenure: "gte_3" },
+    { score: 3, note: null, choice: "Fast", role: null, tenure: null },
+    { score: 5, note: null, choice: null, role: "Engineer", tenure: "lt_1" },
   ];
   assert.equal(engineeringAnswers.length, floor + 2);
   for (const [index, answer] of engineeringAnswers.entries()) {
@@ -68,6 +70,8 @@ test("closed pulse exports one row per named team response", async (t) => {
         surveyId: closedId,
         teamId: engineering,
         submittedAt: new Date(Date.UTC(2026, 9, 1, 0, index)),
+        role: answer.role,
+        tenureBand: answer.tenure,
         cells: [
           { questionId: scale, value: answer.score },
           ...(answer.note === null ? [] : [{ questionId: notes, value: answer.note }]),
@@ -81,6 +85,8 @@ test("closed pulse exports one row per named team response", async (t) => {
       surveyId: closedId,
       teamId: design,
       submittedAt: new Date(Date.UTC(2026, 9, 2)),
+      role: `Folded ${stamp}`,
+      tenureBand: "y1_3",
       cells: [
         { questionId: scale, value: 2 },
         { questionId: notes, value: "folded-note" },
@@ -102,6 +108,8 @@ test("closed pulse exports one row per named team response", async (t) => {
       surveyId: closedId,
       teamId: operations,
       submittedAt: new Date(Date.UTC(2026, 9, 3)),
+      role: `Secret ${stamp}`,
+      tenureBand: "lt_1",
       cells: [
         { questionId: scale, value: 1 },
         { questionId: notes, value: "secret-note" },
@@ -117,17 +125,23 @@ test("closed pulse exports one row per named team response", async (t) => {
   assert.equal(ready.publicToken, closedToken);
   const lines = ready.csv.replace(/^\uFEFF/, "").replace(/\r\n$/, "").split("\r\n");
   assert.equal(lines.length, floor + 3);
-  assert.equal(lines[0], `Team,How was the week?,'=notes,Pace`);
+  assert.equal(lines[0], `Team,Role,Tenure,How was the week?,'=notes,Pace`);
   assert.equal(
     lines[1],
-    `${engineeringName},5,"shipped, today",Fast`,
+    `${engineeringName},Engineer,<1yr,5,"shipped, today",Fast`,
   );
-  assert.equal(lines[2], `${engineeringName},4,,`);
-  assert.equal(lines[3], `${engineeringName},5,'=1+1,Slow`);
+  assert.equal(lines[2], `${engineeringName},Engineer,1-3yr,4,,`);
+  assert.equal(lines[3], `${engineeringName},Designer,3yr+,5,'=1+1,Slow`);
+  assert.equal(lines[4], `${engineeringName},,,3,,Fast`);
   assert.equal(ready.csv.includes(designName), false);
   assert.equal(ready.csv.includes(operationsName), false);
   assert.equal(ready.csv.includes("folded-note"), false);
   assert.equal(ready.csv.includes("secret-note"), false);
+  assert.equal(ready.csv.includes(`Folded ${stamp}`), false);
+  assert.equal(ready.csv.includes(`Secret ${stamp}`), false);
+  assert.equal(ready.csv.includes("lt_1"), false);
+  assert.equal(ready.csv.includes("y1_3"), false);
+  assert.equal(ready.csv.includes("gte_3"), false);
   assert.equal(ready.csv.includes("Too few to show"), false);
   assert.equal(ready.csv.includes(",=1+1"), false);
   for (const id of responseIds) {
@@ -153,7 +167,7 @@ test("closed pulse exports one row per named team response", async (t) => {
   const unassigned = await exportClosedResponses(unassignedToken, { floor });
   assert.equal(unassigned.state, "ready");
   if (unassigned.state === "ready") {
-    assert.match(unassigned.csv, /Unassigned,4/);
+    assert.match(unassigned.csv, /Unassigned,,,4/);
     for (const id of responseIds) {
       assert.equal(unassigned.csv.includes(id), false);
     }
@@ -243,6 +257,8 @@ async function addResponse(input: {
   surveyId: string;
   teamId: string | null;
   submittedAt: Date;
+  role?: string | null;
+  tenureBand?: "lt_1" | "y1_3" | "gte_3" | null;
   cells: { questionId: string; value: string | number }[];
 }) {
   const [response] = await db
@@ -251,6 +267,8 @@ async function addResponse(input: {
       surveyId: input.surveyId,
       teamId: input.teamId,
       submittedAt: input.submittedAt,
+      role: input.role ?? null,
+      tenureBand: input.tenureBand ?? null,
     })
     .returning({ id: responses.id });
   assert.ok(response);

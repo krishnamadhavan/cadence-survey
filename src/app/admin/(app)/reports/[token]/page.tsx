@@ -136,9 +136,10 @@ export default async function ReportDetailPage({
             <>
               <ResponseExportLink token={selected.publicToken} />
               <p className="max-w-xs text-xs text-ink/45 sm:text-right">
-                One row per response, with the team. A team is included only
-                when the report can name it. Smaller groups are left out. This
-                file is the whole pulse, not the role filter on this page.
+                One row per response, with the team, role, and tenure. A team
+                is included only when the report can name it. Smaller groups
+                are left out. This file is the whole pulse, not the role
+                filter on this page.
               </p>
             </>
           ) : null}
