@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExportButtons } from "@/app/admin/(app)/s/[token]/export-buttons";
+import {
+  ExportButtons,
+  ResponseExportLink,
+} from "@/app/admin/(app)/s/[token]/export-buttons";
 import { ReportFilters } from "@/app/admin/(app)/reports/[token]/report-filters";
 import { getSurveyReportDetail } from "@/db/reports";
 import { getAnonymityFloor } from "@/db/settings";
@@ -144,6 +147,17 @@ export default async function ReportDetailPage({
               <p className="text-xs text-ink/45 sm:text-right">
                 Written comments are only in the file, and only for teams that
                 meet the anonymity floor.
+              </p>
+            </>
+          ) : null}
+          {results.survey.status === "closed" ? (
+            <>
+              <ResponseExportLink token={selected.publicToken} />
+              <p className="max-w-xs text-xs text-ink/45 sm:text-right">
+                One row per response, with the team, role, and tenure. A team
+                is included only when the report can name it. Smaller groups
+                are left out. This file is the whole pulse, not the filters
+                on this page.
               </p>
             </>
           ) : null}

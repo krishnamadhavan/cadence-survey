@@ -8,7 +8,7 @@ import type { SurveyStatus } from "@/db/schema";
 import { getAnonymityFloor } from "@/db/settings";
 import { formatSurveyStatus } from "@/lib/survey-status";
 import { CopyLinkButton } from "./copy-link-button";
-import { ExportButtons } from "./export-buttons";
+import { ExportButtons, ResponseExportLink } from "./export-buttons";
 import { SurveyDraftEditor } from "./survey-editor";
 import { SurveySchedule } from "./survey-schedule";
 import { SurveyLifecycle } from "./survey-lifecycle";
@@ -84,10 +84,20 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
             questionCount={results.questions.length}
           />
           <ExportButtons token={results.survey.publicToken} />
+          {status === "closed" ? (
+            <ResponseExportLink token={results.survey.publicToken} />
+          ) : null}
           <p className="max-w-xs text-right text-xs text-ink/45">
             CSV and Excel include written comments from teams that meet the
             anonymity floor.
           </p>
+          {status === "closed" ? (
+            <p className="max-w-xs text-right text-xs text-ink/45">
+              One row per response, with the team, role, and tenure. A team
+              is included only when the report can name it. Smaller groups
+              are left out.
+            </p>
+          ) : null}
         </div>
       </header>
 
