@@ -24,3 +24,14 @@ export function ExportButtons({ token, role }: ExportButtonsProps) {
     </div>
   );
 }
+
+export function ResponseExportLink({ token }: { token: string }) {
+  return (
+    <a
+      href={`/api/admin/surveys/${token}/responses`}
+      className="inline-flex h-10 items-center justify-center rounded-full border border-ink/15 bg-white/70 px-4 text-sm font-medium text-ink transition-colors hover:border-ink/40"
+    >
+      Download responses
+    </a>
+  );
+}
