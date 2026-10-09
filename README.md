@@ -20,7 +20,7 @@ make setup             # start Postgres + Redis, migrate, seed
 make dev               # http://localhost:3000
 ```
 
-Seeded survey address: [http://localhost:3000/s/weekly-pulse](http://localhost:3000/s/weekly-pulse). That shared address does not accept answers. Personal links are listed on the survey in admin after people are on the roster.
+Seeded survey address: [http://localhost:3000/s/weekly-pulse](http://localhost:3000/s/weekly-pulse). That shared address does not accept answers. Personal links are listed on the survey in admin after people are on the roster. Once someone has answered, that link is hidden there.
 
 Admin results: [http://localhost:3000/admin](http://localhost:3000/admin) — sign in with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`admin@cadence.local` / `cadence-admin` by default). If you already have a `.env` from before this change, copy those two keys from `.env.example` and run `pnpm db:seed` again. Re-seeding updates that admin’s password to match `.env`.
 

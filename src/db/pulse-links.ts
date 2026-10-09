@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   answers,
@@ -15,7 +15,8 @@ type LinkDb = Pick<typeof db, "insert" | "select" | "update">;
 export type PulseLinkShare = {
   name: string;
   email: string;
-  token: string;
+  // Null once the link has been used, so the admin list cannot open that answer.
+  token: string | null;
 };
 
 export type PulseLinkList = {
@@ -112,7 +113,7 @@ export async function listPulseLinks(surveyToken: string): Promise<PulseLinkList
     .select({
       name: employees.name,
       email: employees.email,
-      token: pulseLinks.token,
+      token: sql<string | null>`case when ${pulseLinks.redeemed} or ${pulseLinks.responseId} is not null then null else ${pulseLinks.token} end`,
     })
     .from(pulseLinks)
     .innerJoin(employees, eq(employees.id, pulseLinks.employeeId))

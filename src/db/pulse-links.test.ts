@@ -65,8 +65,8 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
   assert.equal(listed.issued, true);
   const adaLink = listed.links.find((link) => link.email === ada.email);
   const beaLink = listed.links.find((link) => link.email === bea.email);
-  assert.ok(adaLink);
-  assert.ok(beaLink);
+  assert.ok(adaLink?.token);
+  assert.ok(beaLink?.token);
   assert.notEqual(adaLink.token, beaLink.token);
   assert.match(adaLink.token, /^[0-9a-f]{32}$/);
   for (const link of listed.links) {
@@ -231,7 +231,7 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
   await setSurveyStatus({ token: otherToken, status: "open" });
   const otherListed = await listPulseLinks(otherToken);
   const adaOnOther = otherListed?.links.find((link) => link.email === ada.email);
-  assert.ok(adaOnOther);
+  assert.ok(adaOnOther?.token);
   assert.notEqual(adaOnOther.token, adaLink.token);
   const crossed = await submitSurveyResponse(
     token,
@@ -258,12 +258,19 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
   const cam = await insertPerson(`Cam ${stamp}`, `cam-${stamp}@pulse.test`, alpha);
   const withCam = await listPulseLinks(token);
   const camLink = withCam?.links.find((link) => link.email === cam.email);
-  assert.ok(camLink);
-  assert.equal(JSON.stringify(withCam).includes(phrase), false);
-  assert.equal(JSON.stringify(withCam).includes(changed), false);
-  assert.equal(JSON.stringify(withCam).includes(first.responseId), false);
-  assert.equal(JSON.stringify(withCam).includes("redeemed"), false);
-  assert.equal(JSON.stringify(withCam).includes("responseId"), false);
+  const adaHidden = withCam?.links.find((link) => link.email === ada.email);
+  const beaHidden = withCam?.links.find((link) => link.email === bea.email);
+  assert.ok(camLink?.token);
+  assert.equal(adaHidden?.token, null);
+  assert.equal(beaHidden?.token, null);
+  const listedJson = JSON.stringify(withCam);
+  assert.equal(listedJson.includes(phrase), false);
+  assert.equal(listedJson.includes(changed), false);
+  assert.equal(listedJson.includes(first.responseId), false);
+  assert.equal(listedJson.includes(adaLink.token), false);
+  assert.equal(listedJson.includes(beaLink.token), false);
+  assert.equal(listedJson.includes("redeemed"), false);
+  assert.equal(listedJson.includes("responseId"), false);
 
   const [raceA, raceB] = await Promise.all([
     submitSurveyResponse(
