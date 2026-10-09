@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
 import { listPulseLinks } from "@/db/pulse-links";
+import { getResultShareToken } from "@/db/result-shares";
 import { listSurveyQuestions } from "@/db/surveys";
 import type { SurveyStatus } from "@/db/schema";
 import { getAnonymityFloor } from "@/db/settings";
@@ -11,6 +12,7 @@ import { CopyLinkButton } from "./copy-link-button";
 import { ExportButtons, ResponseExportLink } from "./export-buttons";
 import { SurveyDraftEditor } from "./survey-editor";
 import { SurveySchedule } from "./survey-schedule";
+import { ResultShare } from "./result-share";
 import { SurveyLifecycle } from "./survey-lifecycle";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +55,8 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   } catch {
     linksError = true;
   }
+  const shareToken =
+    status === "closed" ? await getResultShareToken(results.survey.publicToken) : null;
   const struggling = results.teams.filter(
     (team) =>
       team.health !== "ok" &&
@@ -142,6 +146,13 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           </ul>
         )}
       </section>
+
+      {status === "closed" ? (
+        <ResultShare
+          token={results.survey.publicToken}
+          sharePath={shareToken ? `/results/${shareToken}` : null}
+        />
+      ) : null}
 
       {status === "draft" ? (
         <>
