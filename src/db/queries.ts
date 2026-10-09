@@ -54,7 +54,13 @@ export async function getSurveyByToken(
 ): Promise<PublicSurvey | null> {
   await applyDueSurveySchedules();
   const [survey] = await db
-    .select()
+    .select({
+      id: surveys.id,
+      title: surveys.title,
+      description: surveys.description,
+      publicToken: surveys.publicToken,
+      status: surveys.status,
+    })
     .from(surveys)
     .where(eq(surveys.publicToken, token))
     .limit(1);

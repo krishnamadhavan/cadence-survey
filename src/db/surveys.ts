@@ -44,13 +44,18 @@ const questionColumns = {
 export async function setSurveyStatus(input: {
   token: string;
   status: SurveyStatus;
-}): Promise<{ publicToken: string; status: SurveyStatus }> {
+}): Promise<{
+  publicToken: string;
+  status: SurveyStatus;
+  revokedResultsToken: string | null;
+}> {
   return db.transaction(async (tx) => {
     const [survey] = await tx
       .select({
         id: surveys.id,
         publicToken: surveys.publicToken,
         status: surveys.status,
+        resultsToken: surveys.resultsToken,
       })
       .from(surveys)
       .where(eq(surveys.publicToken, input.token))
@@ -78,13 +83,12 @@ export async function setSurveyStatus(input: {
         .where(eq(questions.surveyId, surveys.id)),
     );
     const openingDraft = input.status === "open" && survey.status === "draft";
+    const reopening = input.status === "open" && survey.status === "closed";
     const [row] = await tx
       .update(surveys)
       .set({
         status: input.status,
-        ...(input.status === "open" && survey.status === "closed"
-          ? { closesAt: null }
-          : {}),
+        ...(reopening ? { closesAt: null, resultsToken: null } : {}),
       })
       .where(
         and(
@@ -104,7 +108,11 @@ export async function setSurveyStatus(input: {
       if (input.status === "closed") {
         await spawnNextPulses(tx, new Date());
       }
-      return row;
+      return {
+        publicToken: row.publicToken,
+        status: row.status,
+        revokedResultsToken: reopening ? survey.resultsToken : null,
+      };
     }
 
     const [fresh] = await tx

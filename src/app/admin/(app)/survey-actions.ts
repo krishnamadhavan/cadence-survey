@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { ensureResultShare, ResultShareError } from "@/db/result-shares";
 import {
   addSurveyQuestion,
   deleteSurveyQuestion,
@@ -50,6 +51,9 @@ export async function setSurveyStatusAction(
   try {
     const updated = await setSurveyStatus({ token, status });
     revalidateSurveyPaths(updated.publicToken);
+    if (updated.revokedResultsToken) {
+      revalidatePath(`/results/${updated.revokedResultsToken}`);
+    }
     return { ok: true, error: null };
   } catch (error) {
     if (error instanceof SurveyStatusError || error instanceof SurveyNotFoundError) {
@@ -261,6 +265,33 @@ export async function setSurveyScheduleAction(
     return { ok: true, error: null };
   } catch (error) {
     return fail(actionError(error, "Could not schedule this pulse. Is Postgres running?"));
+  }
+}
+
+export async function shareSurveyResultsAction(
+  _prev: SurveyActionState,
+  formData: FormData,
+): Promise<SurveyActionState> {
+  if (!(await hasAdminSession())) {
+    redirect("/admin/login?next=/admin");
+  }
+  const token = readToken(formData);
+  if (!token) {
+    return fail("That pulse is not valid.");
+  }
+  try {
+    const share = await ensureResultShare(token);
+    revalidateSurveyPaths(token);
+    revalidatePath(`/results/${share.token}`);
+    return { ok: true, error: null };
+  } catch (error) {
+    if (error instanceof ResultShareError) {
+      if (error.reason === "missing") {
+        return fail("That pulse is gone.");
+      }
+      return fail("Results can be shared once the pulse is closed.");
+    }
+    return fail("Could not create the share link. Is Postgres running?");
   }
 }
 

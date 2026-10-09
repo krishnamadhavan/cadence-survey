@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExportButtons } from "@/app/admin/(app)/s/[token]/export-buttons";
+import { ResultShare } from "@/app/admin/(app)/s/[token]/result-share";
 import { RoleSegment } from "@/app/admin/(app)/reports/[token]/role-segment";
+import { getResultShareToken } from "@/db/result-shares";
 import { getSurveyReportDetail } from "@/db/reports";
 import { getAnonymityFloor } from "@/db/settings";
 import {
@@ -34,10 +36,14 @@ export default async function ReportDetailPage({
     Array.isArray(roleParam) ? roleParam[0] : roleParam,
   );
   let detail: Awaited<ReturnType<typeof getSurveyReportDetail>> | null = null;
+  let shareToken: string | null = null;
   let dbError = false;
 
   try {
     detail = await getSurveyReportDetail(token, role);
+    if (detail?.results.survey.status === "closed") {
+      shareToken = await getResultShareToken(detail.selected.publicToken);
+    }
   } catch {
     dbError = true;
   }
@@ -131,6 +137,14 @@ export default async function ReportDetailPage({
           ) : null}
         </div>
       </header>
+
+      {results.survey.status === "closed" ? (
+        <ResultShare
+          token={selected.publicToken}
+          sharePath={shareToken ? `/results/${shareToken}` : null}
+          note="The link opens the full report, not the role filter on this page."
+        />
+      ) : null}
 
       <section className="mt-8">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
