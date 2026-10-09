@@ -545,8 +545,8 @@ test("role filter keeps the anonymity floor for each role", async (t) => {
   const designerLink = listed?.links.find(
     (link) => link.email === `des-large-${stamp}@cadence.test`,
   );
-  assert.ok(engineerLink);
-  assert.ok(designerLink);
+  assert.ok(engineerLink?.token);
+  assert.ok(designerLink?.token);
   const stamped = await submitSurveyResponse(
     submitToken,
     [{ questionId: submitQuestion, value: 4 }],

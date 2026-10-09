@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { eq, inArray } from "drizzle-orm";
 import { test } from "node:test";
 import { db, pg } from "@/db/client";
-import { listPulseLinks } from "@/db/pulse-links";
+import { listPulseLinks, readPulseLink } from "@/db/pulse-links";
 import { answers, employees, pulseLinks, questions, responses, surveys, teams } from "@/db/schema";
 import { addSurveyQuestion, setSurveyStatus } from "@/db/surveys";
 import { redis } from "@/lib/redis";
@@ -14,7 +14,7 @@ const surveyIds: string[] = [];
 const employeeIds: string[] = [];
 const teamIds: string[] = [];
 
-test("a personal link can be used once and the answer stays anonymous", async (t) => {
+test("a personal link replaces one anonymous answer until the pulse closes", async (t) => {
   t.after(async () => {
     if (surveyIds.length > 0) {
       await db.delete(surveys).where(inArray(surveys.id, surveyIds));
@@ -65,15 +65,18 @@ test("a personal link can be used once and the answer stays anonymous", async (t
   assert.equal(listed.issued, true);
   const adaLink = listed.links.find((link) => link.email === ada.email);
   const beaLink = listed.links.find((link) => link.email === bea.email);
-  assert.ok(adaLink);
-  assert.ok(beaLink);
+  assert.ok(adaLink?.token);
+  assert.ok(beaLink?.token);
   assert.notEqual(adaLink.token, beaLink.token);
   assert.match(adaLink.token, /^[0-9a-f]{32}$/);
   for (const link of listed.links) {
     assert.deepEqual(Object.keys(link).sort(), ["email", "name", "token"]);
   }
 
-  await db.update(employees).set({ teamId: beta }).where(eq(employees.id, ada.id));
+  await db
+    .update(employees)
+    .set({ teamId: beta, role: "Engineer" })
+    .where(eq(employees.id, ada.id));
 
   const phrase = `private-note-${stamp}`;
   const first = await submitSurveyResponse(
@@ -81,6 +84,7 @@ test("a personal link can be used once and the answer stays anonymous", async (t
     [{ questionId: question.id, value: phrase }],
     "direct",
     adaLink.token,
+    "Engineer",
   );
   assert.equal(first.ok, true);
   if (!first.ok) {
@@ -93,12 +97,13 @@ test("a personal link can be used once and the answer stays anonymous", async (t
     .where(eq(responses.id, first.responseId));
   assert.ok(response);
   assert.equal(response.teamId, beta);
+  assert.equal(response.role, "Engineer");
   assert.equal(Object.hasOwn(response, "employeeId"), false);
 
   const [spent] = await db.select().from(pulseLinks).where(eq(pulseLinks.token, adaLink.token));
   assert.equal(spent?.redeemed, true);
   assert.equal(spent?.employeeId, ada.id);
-  assert.equal(Object.hasOwn(spent ?? {}, "responseId"), false);
+  assert.equal(spent?.responseId, first.responseId);
   assert.equal(Object.hasOwn(spent ?? {}, "redeemedAt"), false);
 
   const responseColumns = await pg<{ column_name: string }[]>`
@@ -115,29 +120,92 @@ test("a personal link can be used once and the answer stays anonymous", async (t
   `;
   assert.equal(
     linkColumns.some((column) => column.column_name === "response_id"),
-    false,
+    true,
   );
   assert.equal(
     linkColumns.some((column) => column.column_name === "redeemed_at"),
     false,
   );
 
-  const second = await submitSurveyResponse(
+  await db
+    .update(employees)
+    .set({ teamId: alpha, role: "Designer" })
+    .where(eq(employees.id, ada.id));
+
+  const kept = await submitSurveyResponse(
     token,
-    [{ questionId: question.id, value: `changed-${stamp}` }],
+    [{ questionId: question.id, value: `kept-${stamp}` }],
     "direct",
     adaLink.token,
+    "Engineer",
   );
-  assert.equal(second.ok, false);
-  if (!second.ok) {
-    assert.equal(second.status, 409);
+  assert.equal(kept.ok, true);
+  if (!kept.ok) {
+    return;
   }
+  assert.equal(kept.responseId, first.responseId);
+  const [keptRow] = await db
+    .select({ teamId: responses.teamId, role: responses.role })
+    .from(responses)
+    .where(eq(responses.id, first.responseId));
+  assert.equal(keptRow?.teamId, beta);
+  assert.equal(keptRow?.role, "Engineer");
+
+  const rejected = await submitSurveyResponse(
+    token,
+    [{ questionId: question.id, value: `nope-${stamp}` }],
+    "direct",
+    adaLink.token,
+    "Designer",
+  );
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok) {
+    assert.equal(rejected.status, 400);
+  }
+  const rejectedStored = await db
+    .select({ value: answers.value })
+    .from(answers)
+    .where(eq(answers.responseId, first.responseId));
+  assert.equal(rejectedStored.length, 1);
+  assert.deepEqual(rejectedStored[0]?.value, { value: `kept-${stamp}` });
+
+  const changed = `changed-${stamp}`;
+  const second = await submitSurveyResponse(
+    token,
+    [{ questionId: question.id, value: changed }],
+    "direct",
+    adaLink.token,
+    "",
+  );
+  assert.equal(second.ok, true);
+  if (!second.ok) {
+    return;
+  }
+  assert.equal(second.responseId, first.responseId);
+  const [replaced] = await db
+    .select({ teamId: responses.teamId, role: responses.role })
+    .from(responses)
+    .where(eq(responses.id, first.responseId));
+  assert.equal(replaced?.teamId, beta);
+  assert.equal(replaced?.role, null);
   const stored = await db
     .select({ value: answers.value })
     .from(answers)
     .where(eq(answers.responseId, first.responseId));
   assert.equal(stored.length, 1);
-  assert.deepEqual(stored[0]?.value, { value: phrase });
+  assert.deepEqual(stored[0]?.value, { value: changed });
+  const surveyResponses = await db
+    .select({ id: responses.id })
+    .from(responses)
+    .where(eq(responses.surveyId, surveyId));
+  assert.equal(surveyResponses.length, 1);
+
+  const view = await readPulseLink(token, adaLink.token);
+  assert.equal(view?.editable, true);
+  assert.equal(view?.redeemed, true);
+  assert.equal(view?.teamId, beta);
+  assert.equal(view?.role, null);
+  assert.deepEqual(view?.answers, [{ questionId: question.id, value: changed }]);
 
   const beaSubmit = await submitSurveyResponse(
     token,
@@ -163,7 +231,7 @@ test("a personal link can be used once and the answer stays anonymous", async (t
   await setSurveyStatus({ token: otherToken, status: "open" });
   const otherListed = await listPulseLinks(otherToken);
   const adaOnOther = otherListed?.links.find((link) => link.email === ada.email);
-  assert.ok(adaOnOther);
+  assert.ok(adaOnOther?.token);
   assert.notEqual(adaOnOther.token, adaLink.token);
   const crossed = await submitSurveyResponse(
     token,
@@ -190,9 +258,19 @@ test("a personal link can be used once and the answer stays anonymous", async (t
   const cam = await insertPerson(`Cam ${stamp}`, `cam-${stamp}@pulse.test`, alpha);
   const withCam = await listPulseLinks(token);
   const camLink = withCam?.links.find((link) => link.email === cam.email);
-  assert.ok(camLink);
-  assert.equal(JSON.stringify(withCam).includes(phrase), false);
-  assert.equal(JSON.stringify(withCam).includes("redeemed"), false);
+  const adaHidden = withCam?.links.find((link) => link.email === ada.email);
+  const beaHidden = withCam?.links.find((link) => link.email === bea.email);
+  assert.ok(camLink?.token);
+  assert.equal(adaHidden?.token, null);
+  assert.equal(beaHidden?.token, null);
+  const listedJson = JSON.stringify(withCam);
+  assert.equal(listedJson.includes(phrase), false);
+  assert.equal(listedJson.includes(changed), false);
+  assert.equal(listedJson.includes(first.responseId), false);
+  assert.equal(listedJson.includes(adaLink.token), false);
+  assert.equal(listedJson.includes(beaLink.token), false);
+  assert.equal(listedJson.includes("redeemed"), false);
+  assert.equal(listedJson.includes("responseId"), false);
 
   const [raceA, raceB] = await Promise.all([
     submitSurveyResponse(
@@ -211,21 +289,50 @@ test("a personal link can be used once and the answer stays anonymous", async (t
   const raceStatuses = [raceA, raceB]
     .map((result) => (result.ok ? 201 : result.status))
     .sort((a, b) => a - b);
-  assert.deepEqual(raceStatuses, [201, 409]);
+  assert.deepEqual(raceStatuses, [201, 201]);
+  assert.equal(raceA.ok, true);
+  assert.equal(raceB.ok, true);
+  if (!raceA.ok || !raceB.ok) {
+    return;
+  }
+  assert.equal(raceA.responseId, raceB.responseId);
+  const camResponseId = raceA.responseId;
   const raceAnswers = await db
-    .select({ value: answers.value })
+    .select({ value: answers.value, responseId: answers.responseId })
     .from(answers)
     .innerJoin(questions, eq(questions.id, answers.questionId))
     .where(eq(questions.surveyId, surveyId));
-  const raceValues = raceAnswers
-    .map((row) => row.value)
-    .filter(
-      (value) =>
-        value.value === `race-a-${stamp}` || value.value === `race-b-${stamp}`,
-    );
+  const raceValues = raceAnswers.filter(
+    (row) =>
+      row.responseId === camResponseId &&
+      (row.value.value === `race-a-${stamp}` || row.value.value === `race-b-${stamp}`),
+  );
   assert.equal(raceValues.length, 1);
+  const camRows = await db
+    .select({ id: responses.id })
+    .from(responses)
+    .innerJoin(pulseLinks, eq(pulseLinks.responseId, responses.id))
+    .where(eq(pulseLinks.token, camLink.token));
+  assert.equal(camRows.length, 1);
 
   await setSurveyStatus({ token, status: "closed" });
+  const whileClosed = await submitSurveyResponse(
+    token,
+    [{ questionId: question.id, value: `closed-${stamp}` }],
+    "direct",
+    camLink.token,
+  );
+  assert.equal(whileClosed.ok, false);
+  if (!whileClosed.ok) {
+    assert.equal(whileClosed.status, 404);
+  }
+  const closedStored = await db
+    .select({ value: answers.value })
+    .from(answers)
+    .where(eq(answers.responseId, camResponseId));
+  assert.equal(closedStored.length, 1);
+  assert.equal(closedStored[0]?.value.value === `closed-${stamp}`, false);
+
   await setSurveyStatus({ token, status: "open" });
   const camLinks = await db
     .select({
@@ -244,10 +351,43 @@ test("a personal link can be used once and the answer stays anonymous", async (t
     "direct",
     camLink.token,
   );
-  assert.equal(afterReopen.ok, false);
+  assert.equal(afterReopen.ok, true);
   if (!afterReopen.ok) {
-    assert.equal(afterReopen.status, 409);
+    return;
   }
+  assert.equal(afterReopen.responseId, camResponseId);
+  const reopened = await db
+    .select({ value: answers.value })
+    .from(answers)
+    .where(eq(answers.responseId, camResponseId));
+  assert.equal(reopened.length, 1);
+  assert.deepEqual(reopened[0]?.value, { value: `reopen-${stamp}` });
+
+  await db.update(pulseLinks).set({ responseId: null }).where(eq(pulseLinks.token, adaLink.token));
+  const legacyView = await readPulseLink(token, adaLink.token);
+  assert.equal(legacyView?.redeemed, true);
+  assert.equal(legacyView?.editable, false);
+  assert.deepEqual(legacyView?.answers, []);
+  const legacy = await submitSurveyResponse(
+    token,
+    [{ questionId: question.id, value: `legacy-${stamp}` }],
+    "direct",
+    adaLink.token,
+  );
+  assert.equal(legacy.ok, false);
+  if (!legacy.ok) {
+    assert.equal(legacy.status, 409);
+  }
+  const legacyStored = await db
+    .select({ value: answers.value })
+    .from(answers)
+    .where(eq(answers.responseId, first.responseId));
+  assert.deepEqual(legacyStored[0]?.value, { value: changed });
+  const afterLegacy = await db
+    .select({ id: responses.id })
+    .from(responses)
+    .where(eq(responses.surveyId, surveyId));
+  assert.equal(afterLegacy.length, 3);
 });
 
 async function insertTeam(name: string, slug: string): Promise<string> {

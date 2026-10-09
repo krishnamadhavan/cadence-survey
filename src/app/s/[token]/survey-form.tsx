@@ -10,15 +10,26 @@ type SurveyFormProps = {
   code: string;
   questions: SurveyQuestion[];
   roles: string[];
+  initialValues?: Record<string, string>;
+  initialRole?: string;
+  editing?: boolean;
 };
 
-export function SurveyForm({ token, code, questions, roles }: SurveyFormProps) {
+export function SurveyForm({
+  token,
+  code,
+  questions,
+  roles,
+  initialValues = {},
+  initialRole = "",
+  editing = false,
+}: SurveyFormProps) {
   const [state, action, pending] = useActionState<SubmitState, FormData>(
     submitSurvey,
     null,
   );
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [role, setRole] = useState("");
+  const [values, setValues] = useState<Record<string, string>>(initialValues);
+  const [role, setRole] = useState(initialRole);
 
   return (
     <form action={action} className="flex flex-col gap-10">
@@ -127,7 +138,13 @@ export function SurveyForm({ token, code, questions, roles }: SurveyFormProps) {
         disabled={pending}
         className="inline-flex h-12 items-center justify-center rounded-full bg-ink px-6 text-sm font-medium text-paper transition-colors hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {pending ? "Sending…" : "Send response"}
+        {pending
+          ? editing
+            ? "Saving…"
+            : "Sending…"
+          : editing
+            ? "Save changes"
+            : "Send response"}
       </button>
     </form>
   );
