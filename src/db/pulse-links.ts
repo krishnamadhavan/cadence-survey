@@ -1,7 +1,14 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { employees, pulseLinks, surveys } from "@/db/schema";
+import {
+  answers,
+  employees,
+  pulseLinks,
+  responses,
+  surveys,
+  type AnswerValue,
+} from "@/db/schema";
 import type { TenureBand } from "@/lib/employee-attributes";
 
 type LinkDb = Pick<typeof db, "insert" | "select" | "update">;
@@ -9,7 +16,8 @@ type LinkDb = Pick<typeof db, "insert" | "select" | "update">;
 export type PulseLinkShare = {
   name: string;
   email: string;
-  token: string;
+  // Null once the link has been used, so the admin list cannot open that answer.
+  token: string | null;
 };
 
 export type PulseLinkList = {
@@ -18,10 +26,20 @@ export type PulseLinkList = {
 };
 
 export class PulseLinkError extends Error {
-  constructor(readonly reason: "missing" | "used") {
+  constructor(readonly reason: "missing" | "used" | "closed") {
     super(reason);
   }
 }
+
+export type ClaimedPulseLink =
+  | { mode: "create"; linkId: string; teamId: string; tenureBand: TenureBand | null }
+  | {
+      mode: "update";
+      linkId: string;
+      teamId: string | null;
+      responseId: string;
+      storedRole: string | null;
+    };
 
 const INSERT_CHUNK = 500;
 
@@ -96,7 +114,7 @@ export async function listPulseLinks(surveyToken: string): Promise<PulseLinkList
     .select({
       name: employees.name,
       email: employees.email,
-      token: pulseLinks.token,
+      token: sql<string | null>`case when ${pulseLinks.redeemed} or ${pulseLinks.responseId} is not null then null else ${pulseLinks.token} end`,
     })
     .from(pulseLinks)
     .innerJoin(employees, eq(employees.id, pulseLinks.employeeId))
@@ -106,15 +124,20 @@ export async function listPulseLinks(surveyToken: string): Promise<PulseLinkList
   return { issued: true, links };
 }
 
-export async function readPulseLink(
-  surveyToken: string,
-  code: string,
-): Promise<{
+export type PulseLinkView = {
   redeemed: boolean;
+  editable: boolean;
   status: "draft" | "open" | "closed";
   title: string;
   teamId: string;
-} | null> {
+  role: string | null;
+  answers: { questionId: string; value: string }[];
+};
+
+export async function readPulseLink(
+  surveyToken: string,
+  code: string,
+): Promise<PulseLinkView | null> {
   const normalized = code.trim();
   if (!normalized || normalized.length > 64) {
     return null;
@@ -122,30 +145,81 @@ export async function readPulseLink(
   const [row] = await db
     .select({
       redeemed: pulseLinks.redeemed,
+      responseRowId: responses.id,
+      responseSurveyId: responses.surveyId,
+      responseTeamId: responses.teamId,
+      role: responses.role,
+      surveyId: surveys.id,
       status: surveys.status,
       title: surveys.title,
-      teamId: employees.teamId,
+      employeeTeamId: employees.teamId,
     })
     .from(pulseLinks)
     .innerJoin(surveys, eq(surveys.id, pulseLinks.surveyId))
     .innerJoin(employees, eq(employees.id, pulseLinks.employeeId))
+    .leftJoin(responses, eq(responses.id, pulseLinks.responseId))
     .where(and(eq(surveys.publicToken, surveyToken), eq(pulseLinks.token, normalized)))
     .limit(1);
-  return row ?? null;
+  if (!row) {
+    return null;
+  }
+
+  const responseId =
+    row.responseRowId != null && row.responseSurveyId === row.surveyId
+      ? row.responseRowId
+      : null;
+  const answersForLink = responseId
+    ? await db
+        .select({ questionId: answers.questionId, value: answers.value })
+        .from(answers)
+        .where(eq(answers.responseId, responseId))
+    : [];
+
+  return {
+    redeemed: row.redeemed,
+    editable: !row.redeemed || responseId != null,
+    status: row.status,
+    title: row.title,
+    teamId: responseId ? (row.responseTeamId ?? row.employeeTeamId) : row.employeeTeamId,
+    role: responseId ? row.role : null,
+    answers: answersForLink.flatMap((answer) => {
+      const value = answerText(answer.value);
+      return value == null ? [] : [{ questionId: answer.questionId, value }];
+    }),
+  };
 }
 
-// Marks the link spent and returns the person's current team and tenure band.
-// Callers must insert the response in the same transaction. The team id and
-// the tenure band are the only facts that leave this function; the employee
-// id does not.
+function answerText(value: AnswerValue): string | null {
+  if (typeof value.value === "number" && Number.isFinite(value.value)) {
+    return String(value.value);
+  }
+  if (typeof value.value === "string") {
+    return value.value;
+  }
+  return null;
+}
+
+// Locks the pulse, then the link. A first submit uses the person's current
+// team and tenure band. A later submit keeps the team already stored on the
+// response. The employee id does not leave this function.
 export async function takePulseLink(
   tx: LinkDb,
   surveyId: string,
   code: string,
-): Promise<{ teamId: string; tenureBand: TenureBand | null }> {
+): Promise<ClaimedPulseLink> {
   const normalized = code.trim();
   if (!normalized || normalized.length > 64) {
     throw new PulseLinkError("missing");
+  }
+
+  const [survey] = await tx
+    .select({ id: surveys.id, status: surveys.status })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .for("update")
+    .limit(1);
+  if (!survey || survey.status !== "open") {
+    throw new PulseLinkError("closed");
   }
 
   const [link] = await tx
@@ -153,6 +227,7 @@ export async function takePulseLink(
       id: pulseLinks.id,
       redeemed: pulseLinks.redeemed,
       employeeId: pulseLinks.employeeId,
+      responseId: pulseLinks.responseId,
     })
     .from(pulseLinks)
     .where(and(eq(pulseLinks.surveyId, surveyId), eq(pulseLinks.token, normalized)))
@@ -161,6 +236,29 @@ export async function takePulseLink(
   if (!link) {
     throw new PulseLinkError("missing");
   }
+
+  if (link.responseId) {
+    const [existing] = await tx
+      .select({
+        teamId: responses.teamId,
+        role: responses.role,
+        surveyId: responses.surveyId,
+      })
+      .from(responses)
+      .where(eq(responses.id, link.responseId))
+      .limit(1);
+    if (!existing || existing.surveyId !== surveyId) {
+      throw new PulseLinkError("used");
+    }
+    return {
+      mode: "update",
+      linkId: link.id,
+      teamId: existing.teamId,
+      responseId: link.responseId,
+      storedRole: existing.role,
+    };
+  }
+
   if (link.redeemed) {
     throw new PulseLinkError("used");
   }
@@ -174,14 +272,10 @@ export async function takePulseLink(
     throw new PulseLinkError("missing");
   }
 
-  const [spent] = await tx
-    .update(pulseLinks)
-    .set({ redeemed: true })
-    .where(and(eq(pulseLinks.id, link.id), eq(pulseLinks.redeemed, false)))
-    .returning({ id: pulseLinks.id });
-  if (!spent) {
-    throw new PulseLinkError("used");
-  }
-
-  return { teamId: person.teamId, tenureBand: person.tenureBand };
+  return {
+    mode: "create",
+    linkId: link.id,
+    teamId: person.teamId,
+    tenureBand: person.tenureBand,
+  };
 }

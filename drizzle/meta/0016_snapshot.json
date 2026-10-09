@@ -1,6 +1,6 @@
 {
-  "id": "f080a215-45b7-4c29-8178-810e8bb13c34",
-  "prevId": "d4a4d798-c4a4-4a88-99a0-5f96027379c9",
+  "id": "6cc276a6-375c-4511-b69d-8490577fbd2c",
+  "prevId": "f080a215-45b7-4c29-8178-810e8bb13c34",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -814,6 +814,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "tenure_band": {
+          "name": "tenure_band",
+          "type": "employee_tenure_band",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
         "submitted_at": {
           "name": "submitted_at",
           "type": "timestamp with time zone",
@@ -864,6 +871,27 @@
             },
             {
               "expression": "role",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "responses_survey_tenure_idx": {
+          "name": "responses_survey_tenure_idx",
+          "columns": [
+            {
+              "expression": "survey_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tenure_band",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

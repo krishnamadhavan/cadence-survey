@@ -47,5 +47,5 @@ export async function submitSurvey(
     return { error: result.error };
   }
 
-  redirect(`/s/${token}/thanks`);
+  redirect(`/s/${token}/thanks?code=${encodeURIComponent(code)}`);
 }
