@@ -200,8 +200,8 @@ function answerText(value: AnswerValue): string | null {
 }
 
 // Locks the pulse, then the link. A first submit uses the person's current
-// team and tenure band. A later submit keeps the team and tenure already
-// stored on the response. The employee id does not leave this function.
+// team and tenure band. A later submit keeps the team already stored on the
+// response. The employee id does not leave this function.
 export async function takePulseLink(
   tx: LinkDb,
   surveyId: string,

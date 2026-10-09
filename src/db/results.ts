@@ -1,25 +1,27 @@
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
 import { applyDueSurveySchedules } from "@/db/surveys";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import type { ChoiceOptions, QuestionType, ScaleOptions } from "@/db/schema";
-import { parseRole, ROLE_MAX_LENGTH } from "@/lib/employee-attributes";
+import type { TenureBand } from "@/lib/employee-attributes";
 import {
   MIN_TEAM_RESPONSES,
   SUPPRESSED_TEAM_KEY,
   SUPPRESSED_TEAM_NAME,
-  planRoleSegment,
+  planCombinedSegment,
   planTeamPublish,
   teamPublishKey,
   type TeamPublishPlan,
 } from "@/lib/min-cell";
+import { parseReportSlice, type ReportSlice } from "@/lib/report-slice";
 import {
   collectPublishedComments,
   type WrittenComment,
 } from "@/lib/comments";
 
 export { MIN_TEAM_RESPONSES, SUPPRESSED_TEAM_NAME } from "@/lib/min-cell";
+export { normalizeReportRole, parseReportSlice } from "@/lib/report-slice";
 
 const UNASSIGNED = "Unassigned";
 const LOW_THRESHOLD = 3;
@@ -95,23 +97,14 @@ export type SurveyResults = {
   questions: QuestionResults[];
   /** Null means every role, including responses that have no role snapshot. */
   role: string | null;
+  /** Null means every team. Set only when the report is filtered to one team. */
+  teamId: string | null;
+  teamName: string | null;
+  /** Null means every tenure band, including responses stored before tenure was snapshotted. */
+  tenure: TenureBand | null;
+  /** How the active slice (role, team, tenure, or all of them) may be published. */
   roleVisibility: RoleSegmentVisibility;
 };
-
-/**
- * Blank or missing means all roles. A role is matched exactly after the
- * same trim used when it was stored. Over-long input matches nothing.
- */
-export function normalizeReportRole(role: string | null | undefined): string | null {
-  if (role == null) {
-    return null;
-  }
-  const parsed = parseRole(role);
-  if (!parsed.ok) {
-    return role.trim().slice(0, ROLE_MAX_LENGTH + 1);
-  }
-  return parsed.role;
-}
 
 function anonymityMinimum(configured: number): number {
   return Number.isInteger(configured) && configured >= MIN_TEAM_RESPONSES
@@ -131,67 +124,66 @@ async function resolveAnonymityFloor(floor: number | undefined): Promise<number>
   return anonymityMinimum(await getAnonymityFloor());
 }
 
-async function loadTeamResponseCounts(
-  surveyId: string,
-): Promise<Map<string, number>> {
-  const rows = await db
-    .select({
-      teamId: responses.teamId,
-      n: count(),
-    })
-    .from(responses)
-    .where(eq(responses.surveyId, surveyId))
-    .groupBy(responses.teamId);
-
-  const counts = new Map<string, number>();
-  for (const row of rows) {
-    const key = teamPublishKey(row.teamId);
-    counts.set(key, (counts.get(key) ?? 0) + Number(row.n));
-  }
-  return counts;
-}
-
 type SegmentDecision =
   | { visibility: "empty" | "hidden" | "withheld"; plan: null }
   | { visibility: "all" | "shown"; plan: TeamPublishPlan };
 
+type ResponseAttribute = {
+  teamId: string | null;
+  role: string | null;
+  tenureBand: TenureBand | null;
+};
+
+type SliceFilter = {
+  teamId: string | null;
+  role: string | null;
+  tenure: TenureBand | null;
+};
+
 /**
- * Unfiltered reports use planTeamPublish. A role report also compares
- * that role with the unfiltered counts so a gap of 1..floor-1 is not
- * published as its own survey total, team row, or comment set.
+ * Unfiltered reports use planTeamPublish. A filtered report compares the
+ * slice with every coarser filter the admin can also open, so a gap of
+ * 1..floor-1 is not published as its own total, team row, or comment set.
  */
 async function publishPlanForSurvey(
   surveyId: string,
-  role: string | null,
+  slice: ReportSlice,
   floor: number,
-  roleCounts: Map<string, number>,
+  sliceCounts: Map<string, number>,
 ): Promise<SegmentDecision> {
-  if (!role) {
+  if (slice.unmatched) {
+    return { visibility: "empty", plan: null };
+  }
+  if (!slice.teamId && !slice.role && !slice.tenure) {
     return {
       visibility: "all",
       plan: planTeamPublish(
-        [...roleCounts.entries()].map(([key, n]) => ({ key, count: n })),
+        [...sliceCounts.entries()].map(([key, n]) => ({ key, count: n })),
         floor,
       ),
     };
   }
 
-  const roleTotal = [...roleCounts.values()].reduce((sum, n) => sum + n, 0);
-  if (roleTotal === 0) {
+  const sliceTotal = [...sliceCounts.values()].reduce((sum, n) => sum + n, 0);
+  if (sliceTotal === 0) {
     return { visibility: "empty", plan: null };
   }
-  if (roleTotal < floor) {
+  if (sliceTotal < floor) {
     return { visibility: "hidden", plan: null };
   }
 
-  const totals = await loadTeamResponseCounts(surveyId);
-  const keys = new Set<string>([...totals.keys(), ...roleCounts.keys()]);
-  const segment = planRoleSegment(
-    [...keys].map((key) => ({
-      key,
-      roleCount: roleCounts.get(key) ?? 0,
-      totalCount: totals.get(key) ?? 0,
-    })),
+  const attributes = await loadResponseAttributes(surveyId);
+  const parents = coarserFilters(slice);
+  const segment = planCombinedSegment(
+    [...sliceCounts.entries()]
+      .filter(([, count]) => count > 0)
+      .map(([key, sliceCount]) => ({
+        key,
+        sliceCount,
+        parents: parents.map((filter) => countOnTeam(attributes, key, filter)),
+      })),
+    parents.map((filter) => countMatching(attributes, filter)),
+    sliceTotal,
     floor,
   );
   if (segment.hideSlice) {
@@ -207,11 +199,125 @@ async function publishPlanForSurvey(
   };
 }
 
-function surveyResponsesWhere(surveyId: string, role: string | null) {
-  if (!role) {
-    return eq(responses.surveyId, surveyId);
+async function loadResponseAttributes(surveyId: string): Promise<ResponseAttribute[]> {
+  return db
+    .select({
+      teamId: responses.teamId,
+      role: responses.role,
+      tenureBand: responses.tenureBand,
+    })
+    .from(responses)
+    .where(eq(responses.surveyId, surveyId));
+}
+
+function coarserFilters(slice: SliceFilter): SliceFilter[] {
+  const dims: Array<"team" | "role" | "tenure"> = [];
+  if (slice.teamId) {
+    dims.push("team");
   }
-  return and(eq(responses.surveyId, surveyId), eq(responses.role, role));
+  if (slice.role) {
+    dims.push("role");
+  }
+  if (slice.tenure) {
+    dims.push("tenure");
+  }
+  const filters: SliceFilter[] = [];
+  const full = (1 << dims.length) - 1;
+  for (let mask = 0; mask < full; mask += 1) {
+    const filter: SliceFilter = { teamId: null, role: null, tenure: null };
+    dims.forEach((dim, index) => {
+      if ((mask & (1 << index)) === 0) {
+        return;
+      }
+      if (dim === "team") {
+        filter.teamId = slice.teamId;
+      }
+      if (dim === "role") {
+        filter.role = slice.role;
+      }
+      if (dim === "tenure") {
+        filter.tenure = slice.tenure;
+      }
+    });
+    filters.push(filter);
+  }
+  return filters;
+}
+
+function countMatching(rows: ResponseAttribute[], filter: SliceFilter): number {
+  let total = 0;
+  for (const row of rows) {
+    if (filter.teamId && row.teamId !== filter.teamId) {
+      continue;
+    }
+    if (filter.role && row.role !== filter.role) {
+      continue;
+    }
+    if (filter.tenure && row.tenureBand !== filter.tenure) {
+      continue;
+    }
+    total += 1;
+  }
+  return total;
+}
+
+function countOnTeam(
+  rows: ResponseAttribute[],
+  teamKey: string,
+  filter: SliceFilter,
+): number {
+  let total = 0;
+  for (const row of rows) {
+    if (teamPublishKey(row.teamId) !== teamKey) {
+      continue;
+    }
+    if (filter.role && row.role !== filter.role) {
+      continue;
+    }
+    if (filter.tenure && row.tenureBand !== filter.tenure) {
+      continue;
+    }
+    total += 1;
+  }
+  return total;
+}
+
+function surveyResponsesWhere(surveyId: string, slice: ReportSlice) {
+  const filters = [eq(responses.surveyId, surveyId)];
+  if (slice.teamId) {
+    filters.push(eq(responses.teamId, slice.teamId));
+  }
+  if (slice.role) {
+    filters.push(eq(responses.role, slice.role));
+  }
+  if (slice.tenure) {
+    filters.push(eq(responses.tenureBand, slice.tenure));
+  }
+  return and(...filters);
+}
+
+async function lookupTeamName(teamId: string | null): Promise<string | null> {
+  if (!teamId) {
+    return null;
+  }
+  const [team] = await db
+    .select({ name: teams.name })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  return team?.name ?? null;
+}
+
+function sliceFromOptions(options?: {
+  role?: string | null;
+  teamId?: string | null;
+  tenure?: string | null;
+}): ReportSlice {
+  return parseReportSlice({
+    teamId: options?.teamId,
+    role: options?.role,
+    tenure: options?.tenure,
+  });
 }
 
 function round1(value: number): number {
@@ -424,7 +530,8 @@ function redactedSurveyResults(
     cadence: "weekly" | "biweekly" | "monthly" | null;
   },
   surveyQuestions: Parameters<typeof emptyQuestion>[0][],
-  role: string,
+  slice: ReportSlice,
+  teamName: string | null,
   roleVisibility: "empty" | "hidden" | "withheld",
 ): SurveyResults {
   return {
@@ -441,14 +548,22 @@ function redactedSurveyResults(
     },
     teams: [],
     questions: surveyQuestions.map((question) => emptyQuestion(question)),
-    role,
+    role: slice.role,
+    teamId: slice.teamId,
+    teamName,
+    tenure: slice.tenure,
     roleVisibility,
   };
 }
 
 export async function getSurveyResults(
   token: string,
-  options?: { role?: string | null; floor?: number },
+  options?: {
+    role?: string | null;
+    teamId?: string | null;
+    tenure?: string | null;
+    floor?: number;
+  },
 ): Promise<SurveyResults | null> {
   await applyDueSurveySchedules();
   const [survey] = await db
@@ -467,7 +582,12 @@ export async function getSurveyResults(
     .where(eq(questions.surveyId, survey.id))
     .orderBy(asc(questions.position));
 
-  const role = normalizeReportRole(options?.role);
+  const slice = sliceFromOptions(options);
+  const teamName = await lookupTeamName(slice.teamId);
+  if (slice.unmatched) {
+    return redactedSurveyResults(survey, surveyQuestions, slice, teamName, "empty");
+  }
+
   const rows = await db
     .select({
       responseId: responses.id,
@@ -481,7 +601,7 @@ export async function getSurveyResults(
     .leftJoin(teams, eq(responses.teamId, teams.id))
     .leftJoin(answers, eq(answers.responseId, responses.id))
     .leftJoin(questions, eq(answers.questionId, questions.id))
-    .where(surveyResponsesWhere(survey.id, role));
+    .where(surveyResponsesWhere(survey.id, slice));
 
   const responseMeta = new Map<
     string,
@@ -508,15 +628,16 @@ export async function getSurveyResults(
   }
 
   const floor = await resolveAnonymityFloor(options?.floor);
-  const roleCounts = new Map(
+  const sliceCounts = new Map(
     [...teamResponseIds.entries()].map(([key, ids]) => [key, ids.size]),
   );
-  const decision = await publishPlanForSurvey(survey.id, role, floor, roleCounts);
+  const decision = await publishPlanForSurvey(survey.id, slice, floor, sliceCounts);
   if (!decision.plan) {
     return redactedSurveyResults(
       survey,
       surveyQuestions,
-      role ?? "",
+      slice,
+      teamName,
       decision.visibility,
     );
   }
@@ -718,14 +839,22 @@ export async function getSurveyResults(
     },
     teams: teamSummaries,
     questions: questionResults,
-    role,
+    role: slice.role,
+    teamId: slice.teamId,
+    teamName,
+    tenure: slice.tenure,
     roleVisibility: decision.visibility,
   };
 }
 
 export async function getPublishedComments(
   token: string,
-  options?: { role?: string | null; floor?: number },
+  options?: {
+    role?: string | null;
+    teamId?: string | null;
+    tenure?: string | null;
+    floor?: number;
+  },
 ): Promise<WrittenComment[] | null> {
   const [survey] = await db
     .select()
@@ -737,7 +866,11 @@ export async function getPublishedComments(
     return null;
   }
 
-  const role = normalizeReportRole(options?.role);
+  const slice = sliceFromOptions(options);
+  if (slice.unmatched) {
+    return [];
+  }
+
   const rows = await db
     .select({
       responseId: responses.id,
@@ -751,7 +884,7 @@ export async function getPublishedComments(
     .leftJoin(teams, eq(responses.teamId, teams.id))
     .leftJoin(answers, eq(answers.responseId, responses.id))
     .leftJoin(questions, eq(answers.questionId, questions.id))
-    .where(surveyResponsesWhere(survey.id, role));
+    .where(surveyResponsesWhere(survey.id, slice));
 
   const teamResponseIds = new Map<string, Set<string>>();
   for (const row of rows) {
@@ -762,10 +895,10 @@ export async function getPublishedComments(
   }
 
   const floor = await resolveAnonymityFloor(options?.floor);
-  const roleCounts = new Map(
+  const sliceCounts = new Map(
     [...teamResponseIds.entries()].map(([key, ids]) => [key, ids.size]),
   );
-  const decision = await publishPlanForSurvey(survey.id, role, floor, roleCounts);
+  const decision = await publishPlanForSurvey(survey.id, slice, floor, sliceCounts);
   if (!decision.plan) {
     return [];
   }
