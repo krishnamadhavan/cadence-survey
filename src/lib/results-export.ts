@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import type { SurveyResults, TeamHealth } from "@/db/results";
 import type { WrittenComment } from "@/lib/comments";
+import { tenureBandLabel } from "@/lib/employee-attributes";
 import {
   sanitizeFilenameToken,
   sanitizeSpreadsheetValue,
@@ -56,10 +57,34 @@ export function resultsFilename(
   token: string,
   format: ExportFormat,
   role?: string | null,
+  extra?: { team?: string | null; tenure?: string | null },
 ): string {
   const day = new Date().toISOString().slice(0, 10);
-  const rolePart = role ? `-${sanitizeFilenameToken(role)}` : "";
-  return `${sanitizeFilenameToken(token)}${rolePart}-results-${day}.${format}`;
+  const parts = [sanitizeFilenameToken(token)];
+  if (extra?.team) {
+    parts.push(sanitizeFilenameToken(extra.team));
+  }
+  if (role) {
+    parts.push(sanitizeFilenameToken(role));
+  }
+  if (extra?.tenure) {
+    parts.push(sanitizeFilenameToken(extra.tenure));
+  }
+  return `${parts.join("-")}-results-${day}.${format}`;
+}
+
+function segmentLines(results: SurveyResults): [string, string][] {
+  const lines: [string, string][] = [];
+  if (results.teamId) {
+    lines.push(["Team", results.teamName || results.teamId]);
+  }
+  if (results.role) {
+    lines.push(["Role", results.role]);
+  }
+  if (results.tenure) {
+    lines.push(["Tenure", tenureBandLabel(results.tenure)]);
+  }
+  return lines;
 }
 
 export function buildResultsCsv(
@@ -69,7 +94,7 @@ export function buildResultsCsv(
   const lines: string[] = [
     csvLine(["Survey", results.survey.title]),
     csvLine(["Token", results.survey.publicToken]),
-    ...(results.role ? [csvLine(["Role", results.role])] : []),
+    ...segmentLines(results).map((line) => csvLine(line)),
     csvLine(["Responses", results.survey.responseCount]),
     csvLine(["Average score", formatScore(results.survey.averageScore)]),
     "",
@@ -204,8 +229,8 @@ export async function buildResultsXlsx(
   const summary = workbook.addWorksheet("Summary");
   summary.addRow(excelCells(["Survey", results.survey.title]));
   summary.addRow(excelCells(["Token", results.survey.publicToken]));
-  if (results.role) {
-    summary.addRow(excelCells(["Role", results.role]));
+  for (const line of segmentLines(results)) {
+    summary.addRow(excelCells(line));
   }
   summary.addRow(["Responses", results.survey.responseCount]);
   summary.addRow(["Average score", results.survey.averageScore]);

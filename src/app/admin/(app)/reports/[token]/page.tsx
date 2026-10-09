@@ -1,22 +1,26 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExportButtons } from "@/app/admin/(app)/s/[token]/export-buttons";
-import { RoleSegment } from "@/app/admin/(app)/reports/[token]/role-segment";
+import { ReportFilters } from "@/app/admin/(app)/reports/[token]/report-filters";
 import { getSurveyReportDetail } from "@/db/reports";
 import { getAnonymityFloor } from "@/db/settings";
 import {
   SUPPRESSED_TEAM_NAME,
-  normalizeReportRole,
   type QuestionResults,
   type TeamHealth,
   type TeamSummary,
 } from "@/db/results";
+import { tenureBandLabel, type TenureBand } from "@/lib/employee-attributes";
 
 export const dynamic = "force-dynamic";
 
 type ReportDetailPageProps = {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ role?: string | string[] }>;
+  searchParams: Promise<{
+    team?: string | string[];
+    role?: string | string[];
+    tenure?: string | string[];
+  }>;
 };
 
 export async function generateMetadata({ params }: ReportDetailPageProps) {
@@ -29,15 +33,19 @@ export default async function ReportDetailPage({
   searchParams,
 }: ReportDetailPageProps) {
   const { token } = await params;
-  const roleParam = (await searchParams).role;
-  const role = normalizeReportRole(
-    Array.isArray(roleParam) ? roleParam[0] : roleParam,
-  );
+  const query = await searchParams;
+  const teamRaw = firstParam(query.team) ?? "";
+  const roleRaw = firstParam(query.role) ?? "";
+  const tenureRaw = firstParam(query.tenure) ?? "";
   let detail: Awaited<ReturnType<typeof getSurveyReportDetail>> | null = null;
   let dbError = false;
 
   try {
-    detail = await getSurveyReportDetail(token, role);
+    detail = await getSurveyReportDetail(token, {
+      teamId: teamRaw,
+      role: roleRaw,
+      tenure: tenureRaw,
+    });
   } catch {
     dbError = true;
   }
@@ -51,6 +59,11 @@ export default async function ReportDetailPage({
 
   const { selected, previous, results, previousResults, employeeCount } =
     detail;
+  const roleOnly = Boolean(
+    detail.role && !detail.teamId && !detail.tenure && !teamRaw && !tenureRaw,
+  );
+  const tenureOnly = Boolean(detail.tenure && !detail.role && !detail.teamId && !teamRaw);
+  const label = segmentLabel(detail, teamRaw, tenureRaw);
   const anonymityFloor = await getAnonymityFloor();
   const publishable =
     results.roleVisibility === "all" || results.roleVisibility === "shown";
@@ -122,7 +135,12 @@ export default async function ReportDetailPage({
         <div className="flex flex-col items-start gap-2 sm:items-end">
           {publishable ? (
             <>
-              <ExportButtons token={selected.publicToken} role={detail.role} />
+              <ExportButtons
+                token={selected.publicToken}
+                role={detail.role}
+                teamId={detail.teamId}
+                tenure={detail.tenure}
+              />
               <p className="text-xs text-ink/45 sm:text-right">
                 Written comments are only in the file, and only for teams that
                 meet the anonymity floor.
@@ -137,29 +155,24 @@ export default async function ReportDetailPage({
           Filters / segments
         </h2>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <select
-            disabled
-            className="h-10 rounded-full border border-ink/10 bg-white/50 px-4 text-sm text-ink/40"
-            aria-label="Team segment"
-          >
-            <option>All teams</option>
-          </select>
-          <RoleSegment
+          <ReportFilters
             token={selected.publicToken}
+            teams={detail.teams}
             roles={detail.roles}
-            selected={detail.role}
+            teamId={detail.teamId ?? teamRaw}
+            role={detail.role ?? ""}
+            tenure={detail.tenure ?? tenureRaw}
           />
-          <select
-            disabled
-            className="h-10 rounded-full border border-ink/10 bg-white/50 px-4 text-sm text-ink/40"
-            aria-label="Tenure segment"
-          >
-            <option>All tenure</option>
-          </select>
           <p className="text-xs text-ink/45">
-            {detail.role
-              ? `${detail.role} across teams. Groups under ${anonymityFloor} responses stay hidden. A role that would leave a smaller group exposed stays in All roles.`
-              : "Pick a role to see that role on each team. Team and tenure segments come later."}
+            {label
+              ? roleOnly
+                ? `${detail.role} across teams. Groups under ${anonymityFloor} responses stay hidden. A role that would leave a smaller group exposed stays in All roles.`
+                : `Groups under ${anonymityFloor} responses stay hidden. A slice that would leave a smaller group exposed stays in the wider report.${
+                    detail.tenure
+                      ? " Tenure is the roster band from when the person submitted. Older answers with no band stay under All tenure."
+                      : ""
+                  }`
+              : `Combine team, role, and tenure. Groups under ${anonymityFloor} responses stay hidden.`}
           </p>
         </div>
       </section>
@@ -172,29 +185,25 @@ export default async function ReportDetailPage({
           value={String(results.survey.responseCount)}
           hint={
             participation === null
-              ? detail.role
-                ? `Submitted answers in ${detail.role}`
+              ? label
+                ? `Submitted answers in ${label}`
                 : "Submitted answers"
-              : detail.role
-                ? `${participation}% of people in ${detail.role}`
+              : label
+                ? `${participation}% of people in ${label}`
                 : `${participation}% of the roster`
           }
         />
         <Stat
           label="Average score"
           value={formatScore(results.survey.averageScore)}
-          hint={
-            detail.role
-              ? `Scale questions for ${detail.role}`
-              : "Scale questions only"
-          }
+          hint={label ? `Scale questions for ${label}` : "Scale questions only"}
         />
         <Stat
           label="Participation"
           value={participation === null ? "—" : `${participation}%`}
           hint={
-            detail.role
-              ? `${results.survey.responseCount} of ${employeeCount || "—"} people in ${detail.role}`
+            label
+              ? `${results.survey.responseCount} of ${employeeCount || "—"} people in ${label}`
               : `${results.survey.responseCount} of ${employeeCount || "—"} people`
           }
         />
@@ -265,10 +274,16 @@ export default async function ReportDetailPage({
         ) : !previousPublished ? (
           <p className="mt-3 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
             {previousResults.roleVisibility === "empty"
-              ? `No ${detail.role ?? "role"} responses in ${previous.title}.`
+              ? roleOnly
+                ? `No ${detail.role ?? "role"} responses in ${previous.title}.`
+                : `No ${label ?? "slice"} responses in ${previous.title}.`
               : previousResults.roleVisibility === "withheld"
-                ? `${detail.role ?? "That role"} stays in the full report for ${previous.title}, so a smaller group is not broken out.`
-                : `${previous.title} does not have enough responses${detail.role ? ` in ${detail.role}` : ""} to compare.`}
+                ? roleOnly
+                  ? `${detail.role ?? "That role"} stays in the full report for ${previous.title}, so a smaller group is not broken out.`
+                  : `${label ?? "That slice"} stays in the wider report for ${previous.title}, so a smaller group is not broken out.`
+                : roleOnly
+                  ? `${previous.title} does not have enough responses${detail.role ? ` in ${detail.role}` : ""} to compare.`
+                  : `${previous.title} does not have enough responses${label ? ` in ${label}` : ""} to compare.`}
           </p>
         ) : (
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -322,7 +337,9 @@ export default async function ReportDetailPage({
                 ? "withheld"
                 : "empty"
           }
-          role={detail.role ?? "This role"}
+          label={roleOnly ? (detail.role ?? "This role") : (label ?? "This slice")}
+          roleOnly={roleOnly}
+          tenureOnly={tenureOnly}
           floor={anonymityFloor}
         />
       )}
@@ -331,9 +348,9 @@ export default async function ReportDetailPage({
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
           Trend over time
         </h2>
-        {detail.role ? (
+        {label ? (
           <p className="mt-1 text-sm text-ink/55">
-            {detail.role} only. A cycle that is too small, or that would single out a smaller group, is left blank.
+            {label} only. A cycle that is too small, or that would single out a smaller group, is left blank.
           </p>
         ) : null}
         {!hasCycles ? (
@@ -354,9 +371,11 @@ export default async function ReportDetailPage({
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
           Participation over time
         </h2>
-        {detail.role ? (
+        {label ? (
           <p className="mt-1 text-sm text-ink/55">
-            {detail.role} responses compared with people who have that role now.
+            {roleOnly
+              ? `${detail.role} responses compared with people who have that role now.`
+              : `${label} responses compared with people who match this slice now.`}
           </p>
         ) : null}
         {!hasCycles ? (
@@ -394,7 +413,7 @@ export default async function ReportDetailPage({
           Heatmap
         </h2>
         <p className="mt-1 text-sm text-ink/55">
-          {detail.role ? `${detail.role} on each team. ` : ""}
+          {label ? (detail.teamId ? `${label}. ` : `${label} on each team. `) : ""}
           Team × scale question. Colour follows the same low / watch / ok
           bands. Small teams stay hidden.
         </p>
@@ -450,7 +469,7 @@ export default async function ReportDetailPage({
         </h2>
         <p className="mt-1 text-sm text-ink/55">
           Sorted worst first. Teams with fewer than {anonymityFloor}{" "}
-          responses{detail.role ? ` in ${detail.role}` : ""} are hidden so one
+          responses{label ? ` in ${label}` : ""} are hidden so one
           person cannot be identified.
         </p>
         {namedTeams.length === 0 ? (
@@ -501,7 +520,7 @@ export default async function ReportDetailPage({
         <p className="mt-2 text-sm leading-6 text-ink/60">
           {commentCount} written{" "}
           {commentCount === 1 ? "answer" : "answers"}
-          {detail.role ? ` in ${detail.role}` : ""} on this pulse. The words
+          {label ? ` in ${label}` : ""} on this pulse. The words
           themselves stay in the CSV/Excel download, and only for named teams
           that meet the floor.
         </p>
@@ -514,19 +533,30 @@ export default async function ReportDetailPage({
 
 function SegmentNotice({
   kind,
-  role,
+  label,
+  roleOnly,
+  tenureOnly,
   floor,
 }: {
   kind: "empty" | "hidden" | "withheld";
-  role: string;
+  label: string;
+  roleOnly: boolean;
+  tenureOnly: boolean;
   floor: number;
 }) {
-  const message =
-    kind === "empty"
-      ? `No responses for ${role} yet. Responses with no role stay under All roles.`
+  const message = roleOnly
+    ? kind === "empty"
+      ? `No responses for ${label} yet. Responses with no role stay under All roles.`
       : kind === "withheld"
-        ? `${role} stays in All roles. Showing it on its own would identify a smaller group, so scores, counts, and comments stay in the full report.`
-        : `${role} has too few responses to show. A role needs at least ${floor} responses before scores, counts, or comments are shown.`;
+        ? `${label} stays in All roles. Showing it on its own would identify a smaller group, so scores, counts, and comments stay in the full report.`
+        : `${label} has too few responses to show. A role needs at least ${floor} responses before scores, counts, or comments are shown.`
+    : kind === "empty"
+      ? tenureOnly
+        ? `No responses for ${label} yet. Responses with no tenure stay under All tenure.`
+        : `No responses for ${label} yet.`
+      : kind === "withheld"
+        ? `${label} stays in the wider report. Showing it on its own would identify a smaller group, so scores, counts, and comments stay in the wider report.`
+        : `${label} has too few responses to show. This slice needs at least ${floor} responses before scores, counts, or comments are shown.`;
   return (
     <p className="mt-8 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
       {message}
@@ -709,6 +739,37 @@ function StatusPill({ status }: { status: string }) {
       {label}
     </span>
   );
+}
+
+function segmentLabel(
+  detail: {
+    teamId: string | null;
+    teamName: string | null;
+    role: string | null;
+    tenure: TenureBand | null;
+  },
+  teamRaw: string,
+  tenureRaw: string,
+): string | null {
+  const parts: string[] = [];
+  if (detail.teamId || teamRaw) {
+    parts.push(detail.teamName ?? "That team");
+  }
+  if (detail.role) {
+    parts.push(detail.role);
+  }
+  if (detail.tenure) {
+    parts.push(tenureBandLabel(detail.tenure));
+  } else if (tenureRaw) {
+    parts.push(tenureRaw);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function formatScore(value: number | null) {
