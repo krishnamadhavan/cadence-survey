@@ -1,11 +1,12 @@
-import { count, desc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db/client";
-import { answers, employees, questions, responses, surveys } from "@/db/schema";
+import { answers, employees, questions, responses, surveys, teams } from "@/db/schema";
 import type { AnswerValue, SurveyStatus } from "@/db/schema";
+import type { TenureBand } from "@/lib/employee-attributes";
 import { pickPreviousCycle } from "@/db/reports-cycle";
 import {
   getSurveyResults,
-  normalizeReportRole,
+  parseReportSlice,
   type SurveyResults,
 } from "@/db/results";
 
@@ -29,14 +30,32 @@ export type SurveyReportDetail = {
   previousResults: SurveyResults | null;
   employeeCount: number;
   role: string | null;
+  teamId: string | null;
+  teamName: string | null;
+  tenure: TenureBand | null;
+  teams: { id: string; name: string }[];
   roles: string[];
 };
 
-export async function countEmployees(role?: string | null) {
+export async function countEmployees(segment?: {
+  teamId?: string | null;
+  role?: string | null;
+  tenure?: TenureBand | null;
+}) {
+  const filters = [];
+  if (segment?.teamId) {
+    filters.push(eq(employees.teamId, segment.teamId));
+  }
+  if (segment?.role) {
+    filters.push(eq(employees.role, segment.role));
+  }
+  if (segment?.tenure) {
+    filters.push(eq(employees.tenureBand, segment.tenure));
+  }
   const [row] = await db
     .select({ value: count() })
     .from(employees)
-    .where(role ? eq(employees.role, role) : undefined);
+    .where(filters.length > 0 ? and(...filters) : undefined);
   return row?.value ?? 0;
 }
 
@@ -124,32 +143,62 @@ export async function listReportSurveys(): Promise<ReportListItem[]> {
 
 export async function getSurveyReportDetail(
   token: string,
-  roleInput?: string | null,
+  segmentInput?:
+    | string
+    | {
+        teamId?: string | null;
+        role?: string | null;
+        tenure?: string | null;
+      }
+    | null,
   floor?: number,
 ): Promise<SurveyReportDetail | null> {
-  const role = normalizeReportRole(roleInput);
-  const [surveyRows, employeeCount, roles] = await Promise.all([
+  const raw =
+    typeof segmentInput === "string" || segmentInput == null
+      ? { role: segmentInput }
+      : segmentInput;
+  const slice = parseReportSlice(raw);
+  const [surveyRows, employeeCount, roles, teamRows] = await Promise.all([
     listReportSurveys(),
-    countEmployees(role),
+    slice.unmatched
+      ? Promise.resolve(0)
+      : countEmployees({
+          teamId: slice.teamId,
+          role: slice.role,
+          tenure: slice.tenure,
+        }),
     listSegmentRoles(),
+    db
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .orderBy(asc(teams.name)),
   ]);
   const selected = surveyRows.find((survey) => survey.publicToken === token);
   if (!selected) {
     return null;
   }
 
+  const segmentOptions = {
+    teamId: raw.teamId,
+    role: raw.role,
+    tenure: raw.tenure,
+    floor,
+  };
   const { cycles, previous } = pickPreviousCycle(surveyRows, selected.publicToken);
   const [results, previousResults] = await Promise.all([
-    getSurveyResults(selected.publicToken, { role, floor }),
+    getSurveyResults(selected.publicToken, segmentOptions),
     previous
-      ? getSurveyResults(previous.publicToken, { role, floor })
+      ? getSurveyResults(previous.publicToken, segmentOptions)
       : Promise.resolve(null),
   ]);
   if (!results) {
     return null;
   }
 
-  const cycleRows = role
+  const segmented = Boolean(
+    slice.teamId || slice.role || slice.tenure || slice.unmatched,
+  );
+  const cycleRows = segmented
     ? await Promise.all(
         cycles.map(async (cycle) => {
           const cycleResults =
@@ -157,7 +206,7 @@ export async function getSurveyReportDetail(
               ? results
               : cycle.publicToken === previous?.publicToken
                 ? previousResults
-                : await getSurveyResults(cycle.publicToken, { role, floor });
+                : await getSurveyResults(cycle.publicToken, segmentOptions);
           return roleCycle(cycle, cycleResults, employeeCount);
         }),
       )
@@ -171,7 +220,11 @@ export async function getSurveyReportDetail(
     results,
     previousResults,
     employeeCount,
-    role,
+    role: results.role,
+    teamId: results.teamId,
+    teamName: results.teamName,
+    tenure: results.tenure,
+    teams: teamRows,
     roles,
   };
 }

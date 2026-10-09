@@ -1,6 +1,6 @@
 {
-  "id": "6cc276a6-375c-4511-b69d-8490577fbd2c",
-  "prevId": "f080a215-45b7-4c29-8178-810e8bb13c34",
+  "id": "830e6e4c-9818-4393-8f4a-e482a021b93d",
+  "prevId": "6cc276a6-375c-4511-b69d-8490577fbd2c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1013,6 +1013,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "results_token": {
+          "name": "results_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "text",
@@ -1067,6 +1073,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "public_token"
+          ]
+        },
+        "surveys_results_token_unique": {
+          "name": "surveys_results_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "results_token"
           ]
         },
         "surveys_next_survey_id_unique": {

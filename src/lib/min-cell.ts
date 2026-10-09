@@ -180,6 +180,146 @@ export function planRoleSegment(
   };
 }
 
+type SliceTeam = {
+  key: string;
+  sliceCount: number;
+  parents: number[];
+};
+
+/**
+ * Decide which teams can be named for one combined slice.
+ * surveyParents are the coarser filters an admin can also open, including
+ * the unfiltered report. parents on each team are those filters counted on
+ * that team only. A complement of 1..floor-1 can be subtracted from a
+ * coarser report, so that cell is folded. When folding cannot close the
+ * gap, hideSlice is set and the slice publishes nothing.
+ */
+export function planCombinedSegment(
+  teams: SliceTeam[],
+  surveyParents: number[],
+  sliceTotal: number,
+  minResponses: number = MIN_TEAM_RESPONSES,
+): RoleSegmentPlan {
+  const minimum =
+    Number.isInteger(minResponses) && minResponses >= MIN_TEAM_RESPONSES
+      ? minResponses
+      : MIN_TEAM_RESPONSES;
+  const total = nonNegative(sliceTotal);
+  const surveyComplements = surveyParents.map(
+    (parent) => Math.max(nonNegative(parent), total) - total,
+  );
+  if (surveyComplements.some((complement) => complementIsSmall(complement, minimum))) {
+    return {
+      hideSlice: true,
+      namedKeys: [],
+      suppressedKeys: [],
+      showSuppressedBucket: false,
+    };
+  }
+
+  const merged = new Map<string, { sliceCount: number; parents: number[] }>();
+  for (const team of teams) {
+    const sliceCount = nonNegative(team.sliceCount);
+    const parents = team.parents.map((parent) => nonNegative(parent));
+    const current = merged.get(team.key);
+    if (!current) {
+      merged.set(team.key, { sliceCount, parents });
+      continue;
+    }
+    current.sliceCount += sliceCount;
+    const width = Math.max(current.parents.length, parents.length);
+    const nextParents: number[] = [];
+    for (let index = 0; index < width; index += 1) {
+      nextParents.push(Math.max(current.parents[index] ?? 0, parents[index] ?? 0));
+    }
+    current.parents = nextParents;
+  }
+
+  const named: WorkingSlice[] = [];
+  const suppressed: WorkingSlice[] = [];
+  for (const [key, counts] of merged) {
+    if (counts.sliceCount <= 0) {
+      continue;
+    }
+    const complements = counts.parents.map(
+      (parent) => Math.max(parent, counts.sliceCount) - counts.sliceCount,
+    );
+    const team = { key, sliceCount: counts.sliceCount, complements };
+    if (
+      counts.sliceCount >= minimum &&
+      !complements.some((complement) => complementIsSmall(complement, minimum))
+    ) {
+      named.push(team);
+    } else {
+      suppressed.push(team);
+    }
+  }
+
+  named.sort((a, b) => a.sliceCount - b.sliceCount || a.key.localeCompare(b.key));
+
+  let suppressedCount = suppressed.reduce((sum, team) => sum + team.sliceCount, 0);
+  while (
+    named.length > 0 &&
+    ((suppressedCount > 0 && suppressedCount < minimum) ||
+      summedComplements(suppressed).some((complement) =>
+        complementIsSmall(complement, minimum),
+      ))
+  ) {
+    const next = named.shift();
+    if (!next) {
+      break;
+    }
+    suppressed.push(next);
+    suppressedCount += next.sliceCount;
+  }
+
+  if (
+    summedComplements(suppressed).some((complement) =>
+      complementIsSmall(complement, minimum),
+    )
+  ) {
+    return {
+      hideSlice: true,
+      namedKeys: [],
+      suppressedKeys: suppressed.map((team) => team.key),
+      showSuppressedBucket: false,
+    };
+  }
+
+  if (suppressedCount > 0 && suppressedCount < minimum) {
+    return {
+      hideSlice: false,
+      namedKeys: [],
+      suppressedKeys: suppressed.map((team) => team.key),
+      showSuppressedBucket: false,
+    };
+  }
+
+  return {
+    hideSlice: false,
+    namedKeys: named.map((team) => team.key),
+    suppressedKeys: suppressed.map((team) => team.key),
+    showSuppressedBucket: suppressedCount >= minimum,
+  };
+}
+
+type WorkingSlice = {
+  key: string;
+  sliceCount: number;
+  complements: number[];
+};
+
+function summedComplements(teams: WorkingSlice[]): number[] {
+  const width = teams.reduce((max, team) => Math.max(max, team.complements.length), 0);
+  const sums = Array.from({ length: width }, () => 0);
+  for (const team of teams) {
+    for (let index = 0; index < width; index += 1) {
+      sums[index] += team.complements[index] ?? 0;
+    }
+  }
+  return sums;
+}
+
 type RoleTeam = {
   key: string;
   roleCount: number;

@@ -21,6 +21,9 @@ const sample: SurveyResults = {
     averageScore: 3.6,
   },
   role: null,
+  teamId: null,
+  teamName: null,
+  tenure: null,
   roleVisibility: "all",
   teams: [
     {
@@ -110,6 +113,26 @@ test("csv names the role only when a segment is selected", () => {
     [],
   );
   assert.match(csv, /Role,Engineer/);
+  const header = csv.split("\r\n\r\n")[0] ?? "";
+  assert.doesNotMatch(header, /^Team,/m);
+  assert.doesNotMatch(header, /^Tenure,/m);
+});
+
+test("csv names team and tenure when those filters are on", () => {
+  const csv = buildResultsCsv(
+    {
+      ...sample,
+      teamId: "team-1",
+      teamName: "Engineering",
+      role: "Engineer",
+      tenure: "lt_1",
+      roleVisibility: "shown",
+    },
+    [],
+  );
+  assert.match(csv, /Team,Engineering/);
+  assert.match(csv, /Role,Engineer/);
+  assert.match(csv, /Tenure,<1yr/);
 });
 
 test("resultsFilename allowlists the token", () => {
