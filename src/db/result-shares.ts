@@ -125,6 +125,37 @@ async function mintResultShare(publicToken: string): Promise<{ token: string }> 
   });
 }
 
+// Clears the current link. The old address stops opening the report. A later
+// create stores a different token. Already off is a no-op.
+export async function revokeResultShare(publicToken: string): Promise<{ token: string | null }> {
+  return db.transaction(async (tx) => {
+    const [survey] = await tx
+      .select({
+        id: surveys.id,
+        resultsToken: surveys.resultsToken,
+      })
+      .from(surveys)
+      .where(eq(surveys.publicToken, publicToken))
+      .for("update")
+      .limit(1);
+    if (!survey) {
+      throw new ResultShareError("missing");
+    }
+    if (!survey.resultsToken) {
+      return { token: null };
+    }
+    const [row] = await tx
+      .update(surveys)
+      .set({ resultsToken: null })
+      .where(and(eq(surveys.id, survey.id), eq(surveys.resultsToken, survey.resultsToken)))
+      .returning({ id: surveys.id });
+    if (!row) {
+      return { token: null };
+    }
+    return { token: survey.resultsToken };
+  });
+}
+
 export async function getResultShareToken(publicToken: string): Promise<string | null> {
   const [survey] = await db
     .select({ resultsToken: surveys.resultsToken })

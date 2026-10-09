@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { ensureResultShare, ResultShareError } from "@/db/result-shares";
+import { ensureResultShare, ResultShareError, revokeResultShare } from "@/db/result-shares";
 import {
   addSurveyQuestion,
   deleteSurveyQuestion,
@@ -292,6 +292,32 @@ export async function shareSurveyResultsAction(
       return fail("Results can be shared once the pulse is closed.");
     }
     return fail("Could not create the share link. Is Postgres running?");
+  }
+}
+
+export async function stopSurveyResultsShareAction(
+  _prev: SurveyActionState,
+  formData: FormData,
+): Promise<SurveyActionState> {
+  if (!(await hasAdminSession())) {
+    redirect("/admin/login?next=/admin");
+  }
+  const token = readToken(formData);
+  if (!token) {
+    return fail("That pulse is not valid.");
+  }
+  try {
+    const stopped = await revokeResultShare(token);
+    revalidateSurveyPaths(token);
+    if (stopped.token) {
+      revalidatePath(`/results/${stopped.token}`);
+    }
+    return { ok: true, error: null };
+  } catch (error) {
+    if (error instanceof ResultShareError && error.reason === "missing") {
+      return fail("That pulse is gone.");
+    }
+    return fail("Could not turn off the share link. Is Postgres running?");
   }
 }
 

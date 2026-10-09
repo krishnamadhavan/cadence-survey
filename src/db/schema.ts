@@ -141,7 +141,8 @@ export const surveys = pgTable("surveys", {
   description: text("description"),
   publicToken: text("public_token").notNull().unique(),
   // Unguessable results link. Null until an admin creates it on a closed pulse.
-  // Cleared on reopen. This is not the survey address.
+  // Cleared when an admin turns it off, or when the pulse is reopened.
+  // This is not the survey address.
   resultsToken: text("results_token").unique(),
   status: text("status").notNull().$type<SurveyStatus>().default("draft"),
   opensAt: timestamp("opens_at", { withTimezone: true }),

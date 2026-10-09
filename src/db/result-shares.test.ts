@@ -9,6 +9,7 @@ import {
   getResultShareToken,
   readSharedResults,
   ResultShareError,
+  revokeResultShare,
 } from "@/db/result-shares";
 import { answers, questions, responses, surveys, teams } from "@/db/schema";
 import { SUPPRESSED_TEAM_NAME } from "@/db/results";
@@ -159,6 +160,47 @@ test("a closed pulse can publish results on an unguessable link", async (t) => {
   assert.ok(publicSurvey);
   assert.equal(JSON.stringify(publicSurvey).includes(renewed.token), false);
   assert.equal(JSON.stringify(publicSurvey).includes(secretNote), false);
+
+  const stopped = await revokeResultShare(token);
+  assert.equal(stopped.token, renewed.token);
+  assert.equal(await getResultShareToken(token), null);
+  assert.equal(
+    (await readSharedResults(renewed.token, { floor: MIN_TEAM_RESPONSES })).state,
+    "missing",
+  );
+  const stoppedAgain = await revokeResultShare(token);
+  assert.equal(stoppedAgain.token, null);
+
+  const replacement = await ensureResultShare(token);
+  assert.notEqual(replacement.token, renewed.token);
+  assert.equal(
+    (await readSharedResults(renewed.token, { floor: MIN_TEAM_RESPONSES })).state,
+    "missing",
+  );
+  assert.equal(
+    (await readSharedResults(replacement.token, { floor: MIN_TEAM_RESPONSES })).state,
+    "ready",
+  );
+
+  const [left, right] = await Promise.all([
+    revokeResultShare(token),
+    revokeResultShare(token),
+  ]);
+  assert.equal([left.token, right.token].includes(replacement.token), true);
+  assert.equal([left.token, right.token].includes(null), true);
+  assert.equal(await getResultShareToken(token), null);
+  assert.equal(
+    (await readSharedResults(replacement.token, { floor: MIN_TEAM_RESPONSES })).state,
+    "missing",
+  );
+  await assert.rejects(
+    () => revokeResultShare(`missing-${stamp}`),
+    (error: unknown) => {
+      assert.ok(error instanceof ResultShareError);
+      assert.equal(error.reason, "missing");
+      return true;
+    },
+  );
 });
 
 async function insertTeam(name: string, slug: string) {
