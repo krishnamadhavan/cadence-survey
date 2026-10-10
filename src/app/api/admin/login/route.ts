@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminCredentials } from "@/lib/auth";
 import { readLoginClientIp } from "@/lib/client-ip";
 import { env } from "@/lib/env";
+import {
+  ADMIN_LOGIN_CODE_INVALID,
+  ADMIN_LOGIN_CODE_REQUIRED,
+  ADMIN_LOGIN_CODE_REUSED,
+  ADMIN_LOGIN_INVALID,
+  gateAdminPassword,
+} from "@/lib/admin-login";
 import { limitAdminLogin } from "@/lib/rate-limit";
 import {
   SESSION_COOKIE,
-  createAdminSession,
+  SessionStoreUnavailable,
   sessionCookieOptions,
 } from "@/lib/session";
 
@@ -15,6 +21,7 @@ export const dynamic = "force-dynamic";
 const bodySchema = z.object({
   email: z.string().min(1),
   password: z.string().min(1),
+  code: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -48,31 +55,37 @@ export async function POST(request: Request) {
     );
   }
 
-  let admin;
   try {
-    admin = await verifyAdminCredentials(parsed.data.email, parsed.data.password);
-  } catch {
+    const gate = await gateAdminPassword({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      code: parsed.data.code ?? null,
+    });
+    if (gate.status === "invalid") {
+      return NextResponse.json({ error: ADMIN_LOGIN_INVALID }, { status: 401 });
+    }
+    if (gate.status === "code_required") {
+      return NextResponse.json({ error: ADMIN_LOGIN_CODE_REQUIRED }, { status: 401 });
+    }
+    if (gate.status === "code_reused") {
+      return NextResponse.json({ error: ADMIN_LOGIN_CODE_REUSED }, { status: 401 });
+    }
+    if (gate.status === "code_invalid") {
+      return NextResponse.json({ error: ADMIN_LOGIN_CODE_INVALID }, { status: 401 });
+    }
+
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(SESSION_COOKIE, gate.token, sessionCookieOptions());
+    return response;
+  } catch (error) {
+    if (error instanceof SessionStoreUnavailable) {
+      return NextResponse.json(
+        { error: "Could not start a session. Is Redis running?" },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "Could not reach Postgres. Is Docker running?" },
-      { status: 503 },
-    );
-  }
-
-  if (!admin) {
-    return NextResponse.json(
-      { error: "Email or password is not right." },
-      { status: 401 },
-    );
-  }
-
-  try {
-    const token = await createAdminSession(admin.id);
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
-    return response;
-  } catch {
-    return NextResponse.json(
-      { error: "Could not start a session. Is Redis running?" },
       { status: 503 },
     );
   }

@@ -12,6 +12,8 @@ const actionLabel: Record<string, string> = {
   "employees.reassigned": "People moved",
   "employees.attributes_set": "Attributes set",
   "team.merged": "Team merged",
+  "admin.totp_enabled": "Authenticator on",
+  "admin.totp_disabled": "Authenticator off",
 };
 
 export function auditActionLabel(action: string): string {

@@ -9,7 +9,7 @@ export { matchAdminPassword } from "@/lib/password";
 export async function verifyAdminCredentials(
   email: string,
   password: string,
-): Promise<{ id: string; email: string } | null> {
+): Promise<{ id: string; email: string; totpEnabled: boolean } | null> {
   const normalized = normalizeEmail(email);
   if (!normalized || !password) {
     await matchAdminPassword(password, undefined);
@@ -21,6 +21,7 @@ export async function verifyAdminCredentials(
       id: admins.id,
       email: admins.email,
       passwordHash: admins.passwordHash,
+      totpEnabled: admins.totpEnabled,
     })
     .from(admins)
     .where(eq(admins.email, normalized))
@@ -31,5 +32,5 @@ export async function verifyAdminCredentials(
     return null;
   }
 
-  return { id: admin.id, email: admin.email };
+  return { id: admin.id, email: admin.email, totpEnabled: admin.totpEnabled };
 }

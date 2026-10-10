@@ -13,7 +13,9 @@ export type AuditAction =
   | "anonymity_floor.changed"
   | "employees.reassigned"
   | "employees.attributes_set"
-  | "team.merged";
+  | "team.merged"
+  | "admin.totp_enabled"
+  | "admin.totp_disabled";
 
 export type AuditEvent = {
   id: string;
