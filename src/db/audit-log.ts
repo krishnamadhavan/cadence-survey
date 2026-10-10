@@ -18,7 +18,9 @@ export type AuditAction =
   | "admin.totp_disabled"
   | "results_webhook.changed"
   | "responses.imported"
-  | "workspace_logo.changed";
+  | "workspace_logo.changed"
+  | "admin.profile_updated"
+  | "admin.password_changed";
 
 export type AuditEvent = {
   id: string;

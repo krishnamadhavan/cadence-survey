@@ -16,6 +16,7 @@ export { readBearerToken };
 export async function getAdminSessionUser(): Promise<{
   id: string;
   email: string;
+  name: string | null;
 } | null> {
   try {
     const jar = await cookies();
@@ -25,19 +26,20 @@ export async function getAdminSessionUser(): Promise<{
     }
     try {
       const [admin] = await db
-        .select({ id: admins.id, email: admins.email })
+        .select({ id: admins.id, email: admins.email, name: admins.name })
         .from(admins)
         .where(eq(admins.id, session.adminId))
         .limit(1);
       if (!admin) {
         return null;
       }
-      return admin;
+      const name = admin.name?.trim() ?? "";
+      return { id: admin.id, email: admin.email, name: name || null };
     } catch (error) {
       if (error instanceof SessionStoreUnavailable) {
         return null;
       }
-      return { id: session.adminId, email: "Admin" };
+      return { id: session.adminId, email: "Admin", name: null };
     }
   } catch (error) {
     if (error instanceof SessionStoreUnavailable) {

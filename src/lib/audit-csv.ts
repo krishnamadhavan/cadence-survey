@@ -17,6 +17,8 @@ const actionLabel: Record<string, string> = {
   "results_webhook.changed": "Results webhook",
   "responses.imported": "Responses imported",
   "workspace_logo.changed": "Workspace logo",
+  "admin.profile_updated": "Profile updated",
+  "admin.password_changed": "Password changed",
 };
 
 export function auditActionLabel(action: string): string {

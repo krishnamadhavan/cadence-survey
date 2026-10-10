@@ -1,7 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import {
+  AdminConflictError,
+  AdminNotFoundError,
+  AdminValidationError,
+} from "@/db/admins";
+import {
+  changeOwnAdminPassword,
+  updateOwnAdminAccount,
+} from "@/db/admin-profile";
 import {
   AdminTotpStateError,
   beginAdminTotp,
@@ -11,6 +21,7 @@ import {
   type TotpCodeStatus,
 } from "@/db/admin-totp";
 import { getAdminSessionUser } from "@/lib/admin";
+import { SESSION_COOKIE } from "@/lib/session";
 import {
   ADMIN_LOGIN_CODE_INVALID,
   ADMIN_LOGIN_CODE_REUSED,
@@ -132,5 +143,72 @@ export async function disableAdminTotpAction(
     return { error: null };
   } catch {
     return { error: "Could not turn off the authenticator app. Is Postgres running?" };
+  }
+}
+
+export type AccountActionState = {
+  ok: boolean;
+  error: string | null;
+  savedAt: number | null;
+} | null;
+
+function accountFail(error: string): AccountActionState {
+  return { ok: false, error, savedAt: null };
+}
+
+export async function updateOwnAdminAccountAction(
+  _prev: AccountActionState,
+  formData: FormData,
+): Promise<AccountActionState> {
+  const actor = await requireActor();
+  try {
+    const updated = await updateOwnAdminAccount({
+      id: actor.id,
+      name: formData.get("name"),
+      email: formData.get("email"),
+    });
+    if (updated.changed) {
+      revalidateProfile();
+    }
+    return { ok: true, error: null, savedAt: Date.now() };
+  } catch (error) {
+    if (
+      error instanceof AdminValidationError ||
+      error instanceof AdminConflictError ||
+      error instanceof AdminNotFoundError
+    ) {
+      return accountFail(error.message);
+    }
+    return accountFail("Could not save that account. Is Postgres running?");
+  }
+}
+
+export async function changeOwnAdminPasswordAction(
+  _prev: AccountActionState,
+  formData: FormData,
+): Promise<AccountActionState> {
+  const actor = await requireActor();
+  const keepSessionToken = (await cookies()).get(SESSION_COOKIE)?.value ?? null;
+  try {
+    const currentPassword = formData.get("currentPassword");
+    const nextPassword = formData.get("nextPassword");
+    const confirmPassword = formData.get("confirmPassword");
+    await changeOwnAdminPassword({
+      id: actor.id,
+      currentPassword: typeof currentPassword === "string" ? currentPassword : "",
+      nextPassword: typeof nextPassword === "string" ? nextPassword : "",
+      confirmPassword: typeof confirmPassword === "string" ? confirmPassword : "",
+      keepSessionToken,
+    });
+    revalidateProfile();
+    return { ok: true, error: null, savedAt: Date.now() };
+  } catch (error) {
+    if (
+      error instanceof AdminValidationError ||
+      error instanceof AdminNotFoundError
+    ) {
+      return accountFail(error.message);
+    }
+    return accountFail("Could not change that password. Is Postgres running?");
   }
 }

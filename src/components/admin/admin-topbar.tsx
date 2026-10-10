@@ -8,6 +8,7 @@ import {
   NAV_ITEMS,
   breadcrumbs,
   initialsFromEmail,
+  initialsFromName,
   sidebarWidthClass,
 } from "@/components/admin/admin-nav";
 
@@ -53,12 +54,14 @@ const SEARCH_EXTRAS = [
 
 type AdminTopbarProps = {
   email: string;
+  name?: string | null;
   collapsed: boolean;
   onOpenMobile: () => void;
 };
 
 export function AdminTopbar({
   email,
+  name = null,
   collapsed,
   onOpenMobile,
 }: AdminTopbarProps) {
@@ -184,7 +187,7 @@ export function AdminTopbar({
         <QuickCreateMenu />
         <NotificationsMenu />
         <HelpMenu />
-        <ProfileMenu email={email} />
+        <ProfileMenu email={email} name={name} />
       </div>
 
       {searchOpen ? (
@@ -364,11 +367,11 @@ function HelpMenu() {
   );
 }
 
-function ProfileMenu({ email }: { email: string }) {
+function ProfileMenu({ email, name }: { email: string; name: string | null }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
-  const initials = initialsFromEmail(email);
+  const initials = name ? initialsFromName(name) : initialsFromEmail(email);
   useDismiss(open, () => setOpen(false), rootRef);
 
   return (
@@ -394,7 +397,14 @@ function ProfileMenu({ email }: { email: string }) {
             <p className="text-[10px] font-semibold tracking-[0.16em] text-ink/40 uppercase">
               Signed in
             </p>
-            <p className="mt-1 truncate text-sm font-medium text-ink">{email}</p>
+            {name ? (
+              <>
+                <p className="mt-1 truncate text-sm font-medium text-ink">{name}</p>
+                <p className="truncate text-xs text-ink/50">{email}</p>
+              </>
+            ) : (
+              <p className="mt-1 truncate text-sm font-medium text-ink">{email}</p>
+            )}
           </div>
           <Link
             href="/admin/profile"
