@@ -49,7 +49,7 @@ export async function createAdminAction(
   const role =
     rawRole == null || rawRole === "" ? "admin" : parseAdminRole(String(rawRole));
   if (!role) {
-    return fail("Choose Admin or Viewer.");
+    return fail("Choose full access or viewer.");
   }
   try {
     const created = await createAdmin({
@@ -92,7 +92,7 @@ export async function setAdminRoleAction(
     return fail("That admin is not valid.");
   }
   if (!role) {
-    return fail("Choose Admin or Viewer.");
+    return fail("Choose full access or viewer.");
   }
   try {
     const updated = await setAdminRole({ id: id.data, actorId: actor.id, role });

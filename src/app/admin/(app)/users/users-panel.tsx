@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import type { AdminAccount } from "@/db/admins";
-import { adminRoleLabel, type AdminRole } from "@/lib/admin-role";
+import { adminRoleLabel, adminRoleSwitchLabel, type AdminRole } from "@/lib/admin-role";
 import {
   createAdminAction,
   deleteAdminAction,
@@ -30,8 +30,8 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
       return accounts;
     }
     return accounts.filter((account) => {
-      const role = adminRoleLabel(account.role).toLowerCase();
-      return account.email.toLowerCase().includes(needle) || role.includes(needle);
+      const access = accessSearchText(account.role);
+      return account.email.toLowerCase().includes(needle) || access.includes(needle);
     });
   }, [accounts, query]);
 
@@ -40,9 +40,10 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
       <div className="min-w-0">
         <h1 className="font-serif text-4xl text-ink">Users</h1>
         <p className="mt-2 max-w-2xl text-ink/60">
-          Accounts that can sign in. Admins can change the workspace. Viewers can
-          open the dashboard and reports and cannot change anything. At least one
-          admin who can make changes has to stay.
+          Accounts that can sign in. Switch another account between full access and
+          viewer. Full access can change the workspace. A viewer can open the
+          dashboard and reports and cannot change anything. At least one full-access
+          account has to stay, and you can&apos;t change your own access.
         </p>
       </div>
 
@@ -79,7 +80,7 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
             defaultValue="admin"
             className="h-10 rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30"
           >
-            <option value="admin">Admin</option>
+            <option value="admin">Full access</option>
             <option value="viewer">Viewer</option>
           </select>
         </label>
@@ -104,11 +105,11 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
 
       <div className="mt-6">
         <label className="relative block max-w-xs">
-          <span className="sr-only">Search admins</span>
+          <span className="sr-only">Search accounts</span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search email"
+            placeholder="Search email or access"
             className="h-10 w-full rounded-full border border-ink/10 bg-white/70 px-4 text-sm text-ink outline-none placeholder:text-ink/35 focus:border-ink/30"
           />
         </label>
@@ -120,7 +121,7 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
         ) : accounts.length === 0 ? (
           <p className="text-ink/70">No admin accounts yet.</p>
         ) : filtered.length === 0 ? (
-          <p className="text-ink/70">No admins match that email.</p>
+          <p className="text-ink/70">No accounts match that search.</p>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
             <table className="w-full min-w-[48rem] text-left text-sm">
@@ -162,7 +163,11 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
                       <td className="px-4 py-3 text-right">
                         {isYou || lastAdmin || lastAccount ? (
                           <span className="text-xs text-ink/40">
-                            {isYou ? "Signed in" : "Last admin"}
+                            {isYou
+                              ? "Signed in"
+                              : lastAdmin
+                                ? "Last full access"
+                                : "Last account"}
                           </span>
                         ) : (
                           <RemoveButton id={account.id} email={account.email} />
@@ -195,29 +200,26 @@ function RoleForm({
     setAdminRoleAction,
     null,
   );
+  const label = adminRoleLabel(role);
   if (locked) {
-    return <span className="text-ink/70">{adminRoleLabel(role)}</span>;
+    return <span className="text-ink/70">{label}</span>;
   }
+  const next = role === "admin" ? "viewer" : "admin";
+  const switchLabel = adminRoleSwitchLabel(role);
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="id" value={id} />
-      <select
-        name="role"
-        defaultValue={role}
-        aria-label={`Access for ${email}`}
-        className="h-8 rounded-lg border border-ink/10 bg-white px-2 text-sm text-ink outline-none focus:border-ink/30"
-      >
-        <option value="admin">Admin</option>
-        <option value="viewer">Viewer</option>
-      </select>
+      <input type="hidden" name="role" value={next} />
+      <span className="text-ink">{label}</span>
       <button
         type="submit"
         disabled={pending}
+        aria-label={`${switchLabel} for ${email}`}
         className="inline-flex h-8 items-center rounded-full border border-ink/15 px-3 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-50"
       >
-        {pending ? "Saving…" : "Save"}
+        {pending ? "Switching…" : switchLabel}
       </button>
-      {state?.error ? <p className="text-xs text-rose-800">{state.error}</p> : null}
+      {state?.error ? <p className="basis-full text-xs text-rose-800">{state.error}</p> : null}
     </form>
   );
 }
@@ -240,6 +242,10 @@ function RemoveButton({ id, email }: { id: string; email: string }) {
       {state?.error ? <p className="text-xs text-rose-800">{state.error}</p> : null}
     </form>
   );
+}
+
+function accessSearchText(role: AdminRole): string {
+  return role === "admin" ? "full access admin" : "viewer";
 }
 
 function formatDate(value: string) {

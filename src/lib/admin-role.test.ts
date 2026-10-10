@@ -4,6 +4,7 @@ import { navSectionsForRole } from "@/components/admin/admin-nav";
 import {
   adminLandingPath,
   adminRoleLabel,
+  adminRoleSwitchLabel,
   parseAdminRole,
   viewerMayOpen,
 } from "./admin-role";
@@ -42,8 +43,10 @@ test("login sends a viewer to an allowed page and keeps an admin on the requeste
   assert.equal(parseAdminRole("viewer"), "viewer");
   assert.equal(parseAdminRole("owner"), null);
   assert.equal(parseAdminRole(""), null);
-  assert.equal(adminRoleLabel("admin"), "Admin");
+  assert.equal(adminRoleLabel("admin"), "Full access");
   assert.equal(adminRoleLabel("viewer"), "Viewer");
+  assert.equal(adminRoleSwitchLabel("admin"), "Switch to viewer");
+  assert.equal(adminRoleSwitchLabel("viewer"), "Switch to full access");
 });
 
 test("viewer navigation is the dashboard and reports", () => {

@@ -114,7 +114,7 @@ export async function deleteAdmin(input: {
       throw new AdminValidationError("You can't remove the account you're signed in as.");
     }
     if (block === "last") {
-      throw new AdminValidationError("Keep at least one admin who can make changes.");
+      throw new AdminValidationError("Keep at least one account with full access.");
     }
     await tx.delete(admins).where(eq(admins.id, input.id));
   });
@@ -132,7 +132,7 @@ export async function setAdminRole(input: {
 }): Promise<{ email: string; role: AdminRole; changed: boolean }> {
   const role = parseAdminRole(input.role);
   if (!role) {
-    throw new AdminValidationError("Choose Admin or Viewer.");
+    throw new AdminValidationError("Choose full access or viewer.");
   }
   return db.transaction(async (tx) => {
     const rows = await tx
@@ -152,7 +152,7 @@ export async function setAdminRole(input: {
     }
     const adminCount = rows.filter((row) => coerceAdminRole(row.role) === "admin").length;
     if (current === "admin" && role === "viewer" && adminCount <= 1) {
-      throw new AdminValidationError("Keep at least one admin who can make changes.");
+      throw new AdminValidationError("Keep at least one account with full access.");
     }
     await tx.update(admins).set({ role }).where(eq(admins.id, input.id));
     return { email: target.email, role, changed: true };
@@ -187,7 +187,7 @@ function resolveRole(role: string | undefined): AdminRole {
   }
   const parsed = parseAdminRole(role);
   if (!parsed) {
-    throw new AdminValidationError("Choose Admin or Viewer.");
+    throw new AdminValidationError("Choose full access or viewer.");
   }
   return parsed;
 }

@@ -46,7 +46,7 @@ export default async function AdminDashboardPage() {
         </p>
         {canWrite ? null : (
           <p className="mt-2 text-sm text-ink/45">
-            You can view dashboards and reports. Changes are limited to admins.
+            You can view dashboards and reports. Changes need full access.
           </p>
         )}
       </header>

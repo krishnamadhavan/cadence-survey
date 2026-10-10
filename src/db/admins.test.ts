@@ -121,7 +121,7 @@ test("create, list, and remove admins without dropping the last account", async 
     () => createAdmin({ email: emailV, password: "a-long-password", role: "owner" }),
     (error: unknown) => {
       assert.ok(error instanceof AdminValidationError);
-      assert.equal(error.message, "Choose Admin or Viewer.");
+      assert.equal(error.message, "Choose full access or viewer.");
       return true;
     },
   );
@@ -166,7 +166,7 @@ test("create, list, and remove admins without dropping the last account", async 
       () => deleteAdmin({ id: created.id, actorId: viewer.id }),
       (error: unknown) => {
         assert.ok(error instanceof AdminValidationError);
-        assert.equal(error.message, "Keep at least one admin who can make changes.");
+        assert.equal(error.message, "Keep at least one account with full access.");
         return true;
       },
     );
@@ -174,7 +174,7 @@ test("create, list, and remove admins without dropping the last account", async 
       () => setAdminRole({ id: created.id, actorId: viewer.id, role: "viewer" }),
       (error: unknown) => {
         assert.ok(error instanceof AdminValidationError);
-        assert.equal(error.message, "Keep at least one admin who can make changes.");
+        assert.equal(error.message, "Keep at least one account with full access.");
         return true;
       },
     );
@@ -201,7 +201,7 @@ test("create, list, and remove admins without dropping the last account", async 
     () => setAdminRole({ id: third.id, actorId: created.id, role: "owner" }),
     (error: unknown) => {
       assert.ok(error instanceof AdminValidationError);
-      assert.equal(error.message, "Choose Admin or Viewer.");
+      assert.equal(error.message, "Choose full access or viewer.");
       return true;
     },
   );

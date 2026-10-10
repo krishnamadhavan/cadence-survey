@@ -18,7 +18,11 @@ export function coerceAdminRole(value: unknown): AdminRole {
 }
 
 export function adminRoleLabel(role: AdminRole): string {
-  return role === "viewer" ? "Viewer" : "Admin";
+  return role === "viewer" ? "Viewer" : "Full access";
+}
+
+export function adminRoleSwitchLabel(role: AdminRole): string {
+  return role === "admin" ? "Switch to viewer" : "Switch to full access";
 }
 
 export function viewerMayOpen(pathname: string): boolean {
