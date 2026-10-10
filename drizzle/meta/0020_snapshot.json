@@ -1,6 +1,6 @@
 {
-  "id": "5319e641-54a8-479b-848e-f96b250c98ab",
-  "prevId": "830e6e4c-9818-4393-8f4a-e482a021b93d",
+  "id": "154c91b5-9755-4211-849c-982b2956dee4",
+  "prevId": "817471b2-55c3-4cdc-a786-be51f7af906a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1321,8 +1321,32 @@
           "notNull": true,
           "default": 3
         },
+        "logo": {
+          "name": "logo",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_content_type": {
+          "name": "logo_content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_updated_at": {
+          "name": "logo_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "webhook_url": {
           "name": "webhook_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "webhook_secret": {
+          "name": "webhook_secret",
           "type": "text",
           "primaryKey": false,
           "notNull": false

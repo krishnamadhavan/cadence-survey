@@ -13,6 +13,7 @@ const actionLabel: Record<string, string> = {
   "employees.attributes_set": "Attributes set",
   "team.merged": "Team merged",
   "workspace_logo.changed": "Workspace logo",
+  "results_webhook.changed": "Results webhook",
 };
 
 export function auditActionLabel(action: string): string {

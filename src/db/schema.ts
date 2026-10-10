@@ -64,6 +64,10 @@ export const workspaceSettings = pgTable("workspace_settings", {
   logo: bytea("logo"),
   logoContentType: text("logo_content_type"),
   logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),
+  // Published results summary is POSTed here when a pulse closes. Null sends nothing.
+  webhookUrl: text("webhook_url"),
+  // HMAC key for Cadence-Signature. Cleared with the URL.
+  webhookSecret: text("webhook_secret"),
 });
 
 export const admins = pgTable("admins", {
