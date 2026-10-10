@@ -4,6 +4,7 @@ import {
   ExportButtons,
   ResponseExportLink,
 } from "@/app/admin/(app)/s/[token]/export-buttons";
+import { ResponseImportForm } from "@/app/admin/(app)/s/[token]/response-import-form";
 import { ResultShare } from "@/app/admin/(app)/s/[token]/result-share";
 import { ReportFilters } from "@/app/admin/(app)/reports/[token]/report-filters";
 import { getResultShareToken } from "@/db/result-shares";
@@ -177,6 +178,12 @@ export default async function ReportDetailPage({
           note="The link opens the full report, not the filters on this page."
         />
       ) : null}
+
+      <ResponseImportForm
+        token={selected.publicToken}
+        status={results.survey.status}
+        questionCount={results.questions.length}
+      />
 
       <section className="mt-8">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
