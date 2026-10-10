@@ -16,7 +16,8 @@ export type AuditAction =
   | "team.merged"
   | "admin.totp_enabled"
   | "admin.totp_disabled"
-  | "results_webhook.changed";
+  | "results_webhook.changed"
+  | "responses.imported";
 
 export type AuditEvent = {
   id: string;
