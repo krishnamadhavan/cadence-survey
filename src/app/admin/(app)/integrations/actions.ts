@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   ApiKeyNotFoundError,
@@ -16,7 +15,8 @@ import {
   setResultsWebhookUrl,
   SettingsValidationError,
 } from "@/db/settings";
-import { getAdminSessionUser } from "@/lib/admin";
+import { readWorkspaceWriter, type AdminSessionUser } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 
 export type IntegrationActionState = {
   ok: boolean;
@@ -30,19 +30,25 @@ function fail(error: string): IntegrationActionState {
   return { ok: false, error, secret: null };
 }
 
-async function requireActor() {
-  const actor = await getAdminSessionUser();
+async function requireActor(): Promise<
+  { actor: AdminSessionUser } | { error: IntegrationActionState }
+> {
+  const actor = await readWorkspaceWriter("/admin/integrations");
   if (!actor) {
-    redirect("/admin/login?next=/admin/integrations");
+    return { error: fail(VIEW_ONLY_MESSAGE) };
   }
-  return actor;
+  return { actor };
 }
 
 export async function createApiKeyAction(
   _prev: IntegrationActionState,
   formData: FormData,
 ): Promise<IntegrationActionState> {
-  const actor = await requireActor();
+  const gate = await requireActor();
+  if ("error" in gate) {
+    return gate.error;
+  }
+  const actor = gate.actor;
   try {
     const created = await createApiKey(String(formData.get("name") ?? ""), {
       actorId: actor.id,
@@ -63,7 +69,11 @@ export async function revokeApiKeyAction(
   _prev: IntegrationActionState,
   formData: FormData,
 ): Promise<IntegrationActionState> {
-  const actor = await requireActor();
+  const gate = await requireActor();
+  if ("error" in gate) {
+    return gate.error;
+  }
+  const actor = gate.actor;
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
   if (!id.success) {
     return fail("That key is not valid.");
@@ -88,7 +98,11 @@ export async function setResultsWebhookAction(
   _prev: IntegrationActionState,
   formData: FormData,
 ): Promise<IntegrationActionState> {
-  const actor = await requireActor();
+  const gate = await requireActor();
+  if ("error" in gate) {
+    return gate.error;
+  }
+  const actor = gate.actor;
   const intent = String(formData.get("intent") ?? "save");
   if (intent === "rotate") {
     try {

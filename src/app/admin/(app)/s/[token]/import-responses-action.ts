@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { importSurveyResponses } from "@/db/response-import";
-import { getAdminSessionUser } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 import { RESPONSE_IMPORT_MAX_BYTES } from "@/lib/response-import";
 
 export type ResponseImportState = {
@@ -17,10 +17,14 @@ export async function importResponsesAction(
   formData: FormData,
 ): Promise<ResponseImportState> {
   const token = String(formData.get("token") ?? "").trim();
-  const actor = await getAdminSessionUser();
+  const next = /^[a-z0-9][a-z0-9_-]{0,80}$/i.test(token) ? `/admin/s/${token}` : "/admin";
+  const actor = await readWorkspaceWriter(next);
   if (!actor) {
-    const next = /^[a-z0-9][a-z0-9_-]{0,80}$/i.test(token) ? `/admin/s/${token}` : "/admin";
-    redirect(`/admin/login?next=${next}`);
+    return {
+      ok: false,
+      imported: 0,
+      errors: [{ line: 1, message: VIEW_ONLY_MESSAGE }],
+    };
   }
 
   const file = formData.get("file");

@@ -19,7 +19,8 @@ import {
   createDraftFromTemplate,
 } from "@/db/templates";
 import { parseRequired } from "@/lib/template-question";
-import { hasAdminSession } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 
 export type TemplateActionState = {
   ok: boolean;
@@ -30,6 +31,13 @@ const idSchema = z.string().uuid();
 
 function fail(error: string): TemplateActionState {
   return { ok: false, error };
+}
+
+async function denyViewer(): Promise<TemplateActionState | null> {
+  if (await readWorkspaceWriter("/admin/templates")) {
+    return null;
+  }
+  return fail(VIEW_ONLY_MESSAGE);
 }
 
 function revalidateTemplatePages(templateId?: string) {
@@ -45,8 +53,9 @@ export async function createTemplateAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   let created: { id: string };
@@ -68,8 +77,9 @@ export async function updateTemplateAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
@@ -96,8 +106,9 @@ export async function deleteTemplateAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
@@ -123,8 +134,9 @@ export async function useTemplateAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
@@ -149,8 +161,9 @@ export async function addTemplateQuestionAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const templateId = idSchema.safeParse(String(formData.get("templateId") ?? ""));
@@ -173,8 +186,9 @@ export async function updateTemplateQuestionAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
@@ -201,8 +215,9 @@ export async function deleteTemplateQuestionAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
@@ -226,8 +241,9 @@ export async function moveTemplateQuestionAction(
   _prev: TemplateActionState,
   formData: FormData,
 ): Promise<TemplateActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/templates");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));

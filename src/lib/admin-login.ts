@@ -16,7 +16,7 @@ export type AdminPasswordGate =
   | { status: "code_required"; adminId: string; email: string }
   | { status: "code_invalid" }
   | { status: "code_reused" }
-  | { status: "session"; token: string };
+  | { status: "session"; token: string; adminId: string };
 
 export function presentTotpCode(code: string | null | undefined): string | null {
   if (typeof code !== "string") {
@@ -37,7 +37,11 @@ export async function gateAdminPassword(input: {
     return { status: "invalid" };
   }
   if (!admin.totpEnabled) {
-    return { status: "session", token: await createAdminSession(admin.id) };
+    return {
+      status: "session",
+      token: await createAdminSession(admin.id),
+      adminId: admin.id,
+    };
   }
 
   const code = presentTotpCode(input.code);
@@ -52,5 +56,9 @@ export async function gateAdminPassword(input: {
   if (checked !== "ok") {
     return { status: "code_invalid" };
   }
-  return { status: "session", token: await createAdminSession(admin.id) };
+  return {
+    status: "session",
+    token: await createAdminSession(admin.id),
+    adminId: admin.id,
+  };
 }

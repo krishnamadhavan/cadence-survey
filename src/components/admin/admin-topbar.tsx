@@ -5,11 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { logoutAdmin } from "@/app/admin/login/actions";
 import {
-  NAV_ITEMS,
   breadcrumbs,
   initialsFromEmail,
+  navSectionsForRole,
   sidebarWidthClass,
 } from "@/components/admin/admin-nav";
+import type { AdminRole } from "@/lib/admin-role";
 
 const ACTIVE_CYCLE = {
   title: "Weekly Pulse",
@@ -53,15 +54,20 @@ const SEARCH_EXTRAS = [
 
 type AdminTopbarProps = {
   email: string;
+  role: AdminRole;
   collapsed: boolean;
   onOpenMobile: () => void;
 };
 
 export function AdminTopbar({
   email,
+  role,
   collapsed,
   onOpenMobile,
 }: AdminTopbarProps) {
+  const homeHref = role === "viewer" ? "/admin/dashboard" : "/admin";
+  const cycleHref =
+    role === "viewer" ? "/admin/reports/weekly-pulse" : ACTIVE_CYCLE.href;
   const pathname = usePathname();
   const crumbs = breadcrumbs(pathname);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -86,7 +92,7 @@ export function AdminTopbar({
         }`}
       >
         <Link
-          href="/admin"
+          href={homeHref}
           className="flex items-center gap-2 text-ink"
           title="Cadence"
         >
@@ -112,7 +118,7 @@ export function AdminTopbar({
         </button>
 
         <Link
-          href="/admin"
+          href={homeHref}
           className="flex shrink-0 items-center gap-2 text-ink md:hidden"
           title="Cadence"
         >
@@ -169,7 +175,7 @@ export function AdminTopbar({
       </button>
 
       <Link
-        href={ACTIVE_CYCLE.href}
+        href={cycleHref}
         title={`${ACTIVE_CYCLE.title} · ${ACTIVE_CYCLE.status} · ${ACTIVE_CYCLE.remaining}`}
         className="hidden items-center gap-2 rounded-full border border-ink/10 bg-white/60 px-3 py-1.5 text-xs text-ink/70 transition-colors hover:border-ink/25 lg:inline-flex"
       >
@@ -181,14 +187,15 @@ export function AdminTopbar({
         <span className="text-ink/40">{ACTIVE_CYCLE.remaining}</span>
       </Link>
 
-        <QuickCreateMenu />
-        <NotificationsMenu />
-        <HelpMenu />
-        <ProfileMenu email={email} />
+        {role === "viewer" ? null : <QuickCreateMenu />}
+        {role === "viewer" ? null : <NotificationsMenu />}
+        <HelpMenu role={role} />
+        <ProfileMenu email={email} role={role} />
       </div>
 
       {searchOpen ? (
         <SearchPalette
+          role={role}
           onClose={() => setSearchOpen(false)}
           returnFocusRef={searchButtonRef}
         />
@@ -295,7 +302,7 @@ function NotificationsMenu() {
   );
 }
 
-function HelpMenu() {
+function HelpMenu({ role }: { role: AdminRole }) {
   const [open, setOpen] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -335,14 +342,16 @@ function HelpMenu() {
             >
               Keyboard shortcuts
             </button>
-            <Link
-              href="/admin/settings"
-              role="menuitem"
-              className="block px-4 py-2.5 text-sm text-ink/80 hover:bg-ink/5"
-              onClick={() => setOpen(false)}
-            >
-              Help center
-            </Link>
+            {role === "viewer" ? null : (
+              <Link
+                href="/admin/settings"
+                role="menuitem"
+                className="block px-4 py-2.5 text-sm text-ink/80 hover:bg-ink/5"
+                onClick={() => setOpen(false)}
+              >
+                Help center
+              </Link>
+            )}
             <a
               href="mailto:admin@cadence.local"
               role="menuitem"
@@ -364,7 +373,7 @@ function HelpMenu() {
   );
 }
 
-function ProfileMenu({ email }: { email: string }) {
+function ProfileMenu({ email, role }: { email: string; role: AdminRole }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -395,6 +404,9 @@ function ProfileMenu({ email }: { email: string }) {
               Signed in
             </p>
             <p className="mt-1 truncate text-sm font-medium text-ink">{email}</p>
+            {role === "viewer" ? (
+              <p className="mt-0.5 text-xs text-ink/45">View only</p>
+            ) : null}
           </div>
           <Link
             href="/admin/profile"
@@ -420,9 +432,11 @@ function ProfileMenu({ email }: { email: string }) {
 }
 
 function SearchPalette({
+  role,
   onClose,
   returnFocusRef,
 }: {
+  role: AdminRole;
   onClose: () => void;
   returnFocusRef: React.RefObject<HTMLButtonElement | null>;
 }) {
@@ -434,16 +448,21 @@ function SearchPalette({
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const pages = NAV_ITEMS.map((item) => ({
-      href: item.href,
-      label: item.label,
-      hint: item.section,
-    }));
-    const extras = SEARCH_EXTRAS.map((item) => ({
-      href: item.href,
-      label: item.label,
-      hint: item.hint,
-    }));
+    const pages = navSectionsForRole(role).flatMap((section) =>
+      section.items.map((item) => ({
+        href: item.href,
+        label: item.label,
+        hint: section.label,
+      })),
+    );
+    const extras =
+      role === "viewer"
+        ? []
+        : SEARCH_EXTRAS.map((item) => ({
+            href: item.href,
+            label: item.label,
+            hint: item.hint,
+          }));
     const all = [...pages, ...extras];
     if (!q) {
       return all.slice(0, 8);
@@ -453,7 +472,7 @@ function SearchPalette({
         item.label.toLowerCase().includes(q) ||
         item.hint.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [query, role]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;

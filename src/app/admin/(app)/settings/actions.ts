@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { recordAudit } from "@/db/audit-log";
 import {
   clearWorkspaceLogo,
@@ -10,7 +9,8 @@ import {
   setWorkspaceLogo,
   SettingsValidationError,
 } from "@/db/settings";
-import { getAdminSessionUser } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 import {
   detectWorkspaceLogo,
   workspaceLogoValidationMessage,
@@ -29,9 +29,9 @@ export async function setAnonymityFloorAction(
   _prev: SettingsActionState,
   formData: FormData,
 ): Promise<SettingsActionState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/settings");
   if (!actor) {
-    redirect("/admin/login?next=/admin/settings");
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const raw = String(formData.get("anonymityFloor") ?? "").trim();
   const value = Number(raw);
@@ -61,9 +61,9 @@ export async function workspaceLogoAction(
   _prev: SettingsActionState,
   formData: FormData,
 ): Promise<SettingsActionState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/settings");
   if (!actor) {
-    redirect("/admin/login?next=/admin/settings");
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const intent = String(formData.get("intent") ?? "upload");
   try {

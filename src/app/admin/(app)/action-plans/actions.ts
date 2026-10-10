@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   ActionPlanError,
@@ -10,7 +9,8 @@ import {
   setActionPlanStatus,
 } from "@/db/action-plans";
 import type { ActionPlanStatus } from "@/db/schema";
-import { hasAdminSession } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 
 export type ActionPlanActionState = {
   ok: boolean;
@@ -27,8 +27,8 @@ export async function createActionPlanAction(
   _prev: ActionPlanActionState,
   formData: FormData,
 ): Promise<ActionPlanActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/recommendations");
+  if (!(await readWorkspaceWriter("/admin/recommendations"))) {
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const token = String(formData.get("token") ?? "").trim();
   const teamKey = String(formData.get("teamKey") ?? "").trim();
@@ -51,8 +51,8 @@ export async function setActionPlanStatusAction(
   _prev: ActionPlanActionState,
   formData: FormData,
 ): Promise<ActionPlanActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/action-plans");
+  if (!(await readWorkspaceWriter("/admin/action-plans"))) {
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const id = idSchema.safeParse(String(formData.get("id") ?? ""));
   const status = String(formData.get("status") ?? "") as ActionPlanStatus;

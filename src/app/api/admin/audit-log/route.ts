@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { listAuditEvents } from "@/db/audit-log";
-import { requireAdminApi } from "@/lib/admin";
+import { requireWorkspaceWriterApi } from "@/lib/admin";
 import { buildAuditCsv } from "@/lib/audit-csv";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = await requireAdminApi(request);
+  const denied = await requireWorkspaceWriterApi(request);
   if (denied) {
     return denied;
   }

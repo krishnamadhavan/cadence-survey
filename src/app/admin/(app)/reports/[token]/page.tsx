@@ -16,6 +16,7 @@ import {
   type TeamHealth,
   type TeamSummary,
 } from "@/db/results";
+import { getAdminSessionUser } from "@/lib/admin";
 import { tenureBandLabel, type TenureBand } from "@/lib/employee-attributes";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,8 @@ export default async function ReportDetailPage({
   params,
   searchParams,
 }: ReportDetailPageProps) {
+  const admin = await getAdminSessionUser();
+  const canWrite = admin?.role === "admin";
   const { token } = await params;
   const query = await searchParams;
   const teamRaw = firstParam(query.team) ?? "";
@@ -171,7 +174,7 @@ export default async function ReportDetailPage({
         </div>
       </header>
 
-      {results.survey.status === "closed" ? (
+      {canWrite && results.survey.status === "closed" ? (
         <ResultShare
           token={selected.publicToken}
           sharePath={shareToken ? `/results/${shareToken}` : null}
@@ -179,11 +182,13 @@ export default async function ReportDetailPage({
         />
       ) : null}
 
-      <ResponseImportForm
-        token={selected.publicToken}
-        status={results.survey.status}
-        questionCount={results.questions.length}
-      />
+      {canWrite ? (
+        <ResponseImportForm
+          token={selected.publicToken}
+          status={results.survey.status}
+          questionCount={results.questions.length}
+        />
+      ) : null}
 
       <section className="mt-8">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">

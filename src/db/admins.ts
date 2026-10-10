@@ -1,6 +1,11 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { admins } from "@/db/schema";
+import {
+  coerceAdminRole,
+  parseAdminRole,
+  type AdminRole,
+} from "@/lib/admin-role";
 import { normalizeEmail } from "@/lib/email";
 import { hashAdminPassword } from "@/lib/password";
 import { destroySessionsForAdmin } from "@/lib/session";
@@ -16,7 +21,13 @@ export class AdminNotFoundError extends Error {}
 export type AdminAccount = {
   id: string;
   email: string;
+  role: AdminRole;
   createdAt: string;
+};
+
+export type AdminAccessRow = {
+  id: string;
+  role: AdminRole;
 };
 
 export async function listAdmins(): Promise<AdminAccount[]> {
@@ -24,6 +35,7 @@ export async function listAdmins(): Promise<AdminAccount[]> {
     .select({
       id: admins.id,
       email: admins.email,
+      role: admins.role,
       createdAt: admins.createdAt,
     })
     .from(admins)
@@ -31,6 +43,7 @@ export async function listAdmins(): Promise<AdminAccount[]> {
   return rows.map((row) => ({
     id: row.id,
     email: row.email,
+    role: coerceAdminRole(row.role),
     createdAt: row.createdAt.toISOString(),
   }));
 }
@@ -38,6 +51,7 @@ export async function listAdmins(): Promise<AdminAccount[]> {
 export async function createAdmin(input: {
   email: string;
   password: string;
+  role?: string;
 }): Promise<AdminAccount> {
   const email = normalizeEmail(input.email);
   if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
@@ -46,15 +60,17 @@ export async function createAdmin(input: {
   if (input.password.length < PASSWORD_MIN || input.password.length > PASSWORD_MAX) {
     throw new AdminValidationError("Password must be 8–200 characters.");
   }
+  const role = resolveRole(input.role);
 
   const passwordHash = await hashAdminPassword(input.password);
   try {
     const [row] = await db
       .insert(admins)
-      .values({ email, passwordHash })
+      .values({ email, passwordHash, role })
       .returning({
         id: admins.id,
         email: admins.email,
+        role: admins.role,
         createdAt: admins.createdAt,
       });
     if (!row) {
@@ -63,6 +79,7 @@ export async function createAdmin(input: {
     return {
       id: row.id,
       email: row.email,
+      role: coerceAdminRole(row.role),
       createdAt: row.createdAt.toISOString(),
     };
   } catch (error) {
@@ -82,11 +99,11 @@ export async function deleteAdmin(input: {
 }): Promise<void> {
   await db.transaction(async (tx) => {
     const rows = await tx
-      .select({ id: admins.id })
+      .select({ id: admins.id, role: admins.role })
       .from(admins)
       .for("update");
     const block = adminDeletionBlock(
-      rows.map((row) => row.id),
+      rows.map((row) => ({ id: row.id, role: coerceAdminRole(row.role) })),
       input.id,
       input.actorId,
     );
@@ -97,7 +114,7 @@ export async function deleteAdmin(input: {
       throw new AdminValidationError("You can't remove the account you're signed in as.");
     }
     if (block === "last") {
-      throw new AdminValidationError("Keep at least one admin.");
+      throw new AdminValidationError("Keep at least one account with full access.");
     }
     await tx.delete(admins).where(eq(admins.id, input.id));
   });
@@ -108,21 +125,71 @@ export async function deleteAdmin(input: {
   }
 }
 
+export async function setAdminRole(input: {
+  id: string;
+  actorId: string;
+  role: string;
+}): Promise<{ email: string; role: AdminRole; changed: boolean }> {
+  const role = parseAdminRole(input.role);
+  if (!role) {
+    throw new AdminValidationError("Choose full access or viewer.");
+  }
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: admins.id, email: admins.email, role: admins.role })
+      .from(admins)
+      .for("update");
+    const target = rows.find((row) => row.id === input.id);
+    if (!target) {
+      throw new AdminNotFoundError("That admin is gone.");
+    }
+    if (input.id === input.actorId) {
+      throw new AdminValidationError("You can't change your own access.");
+    }
+    const current = coerceAdminRole(target.role);
+    if (current === role) {
+      return { email: target.email, role, changed: false };
+    }
+    const adminCount = rows.filter((row) => coerceAdminRole(row.role) === "admin").length;
+    if (current === "admin" && role === "viewer" && adminCount <= 1) {
+      throw new AdminValidationError("Keep at least one account with full access.");
+    }
+    await tx.update(admins).set({ role }).where(eq(admins.id, input.id));
+    return { email: target.email, role, changed: true };
+  });
+}
+
 export function adminDeletionBlock(
-  ids: string[],
+  rows: AdminAccessRow[],
   id: string,
   actorId: string,
 ): "missing" | "self" | "last" | null {
-  if (!ids.includes(id)) {
+  const target = rows.find((row) => row.id === id);
+  if (!target) {
     return "missing";
   }
   if (id === actorId) {
     return "self";
   }
-  if (ids.length <= 1) {
+  const remaining = rows.filter((row) => row.id !== id);
+  if (
+    remaining.length === 0 ||
+    (target.role === "admin" && !remaining.some((row) => row.role === "admin"))
+  ) {
     return "last";
   }
   return null;
+}
+
+function resolveRole(role: string | undefined): AdminRole {
+  if (role == null || role === "") {
+    return "admin";
+  }
+  const parsed = parseAdminRole(role);
+  if (!parsed) {
+    throw new AdminValidationError("Choose full access or viewer.");
+  }
+  return parsed;
 }
 
 function isUniqueViolation(error: unknown) {

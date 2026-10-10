@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDashboardSnapshot } from "@/db/dashboard";
+import { getAdminSessionUser } from "@/lib/admin";
 import {
   SUPPRESSED_TEAM_NAME,
   type TeamHealth,
@@ -9,6 +10,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
+  const admin = await getAdminSessionUser();
+  const canWrite = admin?.role === "admin";
   let snapshot: Awaited<ReturnType<typeof getDashboardSnapshot>> | null = null;
   let dbError = false;
 
@@ -41,6 +44,11 @@ export default async function AdminDashboardPage() {
         <p className="mt-2 text-ink/60">
           Pulse scores, participation, and what needs attention.
         </p>
+        {canWrite ? null : (
+          <p className="mt-2 text-sm text-ink/45">
+            You can view dashboards and reports. Changes need full access.
+          </p>
+        )}
       </header>
 
       {dbError ? (
@@ -112,7 +120,11 @@ export default async function AdminDashboardPage() {
                   </p>
                   <div className="mt-5 flex flex-wrap gap-2">
                     <Link
-                      href={`/admin/s/${active.survey.publicToken}`}
+                      href={
+                        canWrite
+                          ? `/admin/s/${active.survey.publicToken}`
+                          : `/admin/reports/${active.survey.publicToken}`
+                      }
                       className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-medium text-paper"
                     >
                       View results
@@ -164,7 +176,11 @@ export default async function AdminDashboardPage() {
               )}
               {active ? (
                 <Link
-                  href={`/admin/s/${active.survey.publicToken}`}
+                  href={
+                    canWrite
+                      ? `/admin/s/${active.survey.publicToken}`
+                      : `/admin/reports/${active.survey.publicToken}`
+                  }
                   className="mt-4 inline-flex text-sm font-medium text-accent underline-offset-4 hover:underline"
                 >
                   Open team breakdown
@@ -178,12 +194,14 @@ export default async function AdminDashboardPage() {
               <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
                 Pulses
               </h2>
-              <Link
-                href="/admin"
-                className="text-sm font-medium text-accent underline-offset-4 hover:underline"
-              >
-                All surveys
-              </Link>
+              {canWrite ? (
+                <Link
+                  href="/admin"
+                  className="text-sm font-medium text-accent underline-offset-4 hover:underline"
+                >
+                  All surveys
+                </Link>
+              ) : null}
             </div>
             {snapshot.surveys.length === 0 ? (
               <p className="mt-4 text-sm text-ink/70">No surveys yet.</p>
@@ -192,7 +210,11 @@ export default async function AdminDashboardPage() {
                 {snapshot.surveys.map((survey) => (
                   <li key={survey.id}>
                     <Link
-                      href={`/admin/s/${survey.publicToken}`}
+                      href={
+                        canWrite
+                          ? `/admin/s/${survey.publicToken}`
+                          : `/admin/reports/${survey.publicToken}`
+                      }
                       className="block rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 transition-colors hover:border-accent/40"
                     >
                       <div className="flex items-baseline justify-between gap-3">
@@ -254,33 +276,35 @@ export default async function AdminDashboardPage() {
             </section>
           ) : null}
 
-          <section className="mt-10">
-            <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
-              Shortcuts
-            </h2>
-            <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Shortcut
-                href="/admin/employees"
-                title="Employees"
-                body="Load or search the roster."
-              />
-              <Shortcut
-                href="/admin/teams"
-                title="Teams"
-                body="Create and rename the org map."
-              />
-              <Shortcut
-                href="/admin/action-plans"
-                title="Action plans"
-                body="Track follow-ups taken from recommendations."
-              />
-              <Shortcut
-                href="/admin/recommendations"
-                title="Recommendations"
-                body="Follow-ups for teams that are low or on watch."
-              />
-            </ul>
-          </section>
+          {canWrite ? (
+            <section className="mt-10">
+              <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
+                Shortcuts
+              </h2>
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Shortcut
+                  href="/admin/employees"
+                  title="Employees"
+                  body="Load or search the roster."
+                />
+                <Shortcut
+                  href="/admin/teams"
+                  title="Teams"
+                  body="Create and rename the org map."
+                />
+                <Shortcut
+                  href="/admin/action-plans"
+                  title="Action plans"
+                  body="Track follow-ups taken from recommendations."
+                />
+                <Shortcut
+                  href="/admin/recommendations"
+                  title="Recommendations"
+                  body="Follow-ups for teams that are low or on watch."
+                />
+              </ul>
+            </section>
+          ) : null}
         </>
       ) : null}
     </div>
