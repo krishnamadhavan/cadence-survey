@@ -1,6 +1,6 @@
 {
-  "id": "c4dfbb67-764f-4a18-abca-8914560903d6",
-  "prevId": "817471b2-55c3-4cdc-a786-be51f7af906a",
+  "id": "399827a5-f437-4b8a-842c-601503bf1914",
+  "prevId": "c4dfbb67-764f-4a18-abca-8914560903d6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1339,6 +1339,24 @@
           "primaryKey": false,
           "notNull": true,
           "default": 3
+        },
+        "logo": {
+          "name": "logo",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_content_type": {
+          "name": "logo_content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_updated_at": {
+          "name": "logo_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "webhook_url": {
           "name": "webhook_url",

@@ -12,6 +12,7 @@ import { CopyLinkButton } from "./copy-link-button";
 import { ExportButtons, ResponseExportLink } from "./export-buttons";
 import { SurveyDraftEditor } from "./survey-editor";
 import { SurveySchedule } from "./survey-schedule";
+import { ResponseImportForm } from "./response-import-form";
 import { ResultShare } from "./result-share";
 import { SurveyLifecycle } from "./survey-lifecycle";
 
@@ -169,6 +170,12 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           />
         </>
       ) : null}
+
+      <ResponseImportForm
+        token={results.survey.publicToken}
+        status={status}
+        questionCount={results.questions.length}
+      />
 
       <section className="mt-10 grid gap-3 sm:grid-cols-3">
         <Stat label="Responses" value={String(results.survey.responseCount)} />

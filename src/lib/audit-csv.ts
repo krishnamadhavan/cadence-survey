@@ -12,8 +12,11 @@ const actionLabel: Record<string, string> = {
   "employees.reassigned": "People moved",
   "employees.attributes_set": "Attributes set",
   "team.merged": "Team merged",
-  "workspace_logo.changed": "Workspace logo",
+  "admin.totp_enabled": "Authenticator on",
+  "admin.totp_disabled": "Authenticator off",
   "results_webhook.changed": "Results webhook",
+  "responses.imported": "Responses imported",
+  "workspace_logo.changed": "Workspace logo",
 };
 
 export function auditActionLabel(action: string): string {

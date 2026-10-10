@@ -14,8 +14,11 @@ export type AuditAction =
   | "employees.reassigned"
   | "employees.attributes_set"
   | "team.merged"
-  | "workspace_logo.changed"
-  | "results_webhook.changed";
+  | "admin.totp_enabled"
+  | "admin.totp_disabled"
+  | "results_webhook.changed"
+  | "responses.imported"
+  | "workspace_logo.changed";
 
 export type AuditEvent = {
   id: string;
