@@ -2,9 +2,11 @@
 
 import { useActionState, useMemo, useState } from "react";
 import type { AdminAccount } from "@/db/admins";
+import { adminRoleLabel, type AdminRole } from "@/lib/admin-role";
 import {
   createAdminAction,
   deleteAdminAction,
+  setAdminRoleAction,
   type UserActionState,
 } from "./actions";
 
@@ -20,27 +22,33 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
     UserActionState,
     FormData
   >(createAdminAction, null);
+  const adminCount = accounts.filter((account) => account.role === "admin").length;
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) {
       return accounts;
     }
-    return accounts.filter((account) => account.email.toLowerCase().includes(needle));
+    return accounts.filter((account) => {
+      const role = adminRoleLabel(account.role).toLowerCase();
+      return account.email.toLowerCase().includes(needle) || role.includes(needle);
+    });
   }, [accounts, query]);
 
   return (
     <>
       <div className="min-w-0">
         <h1 className="font-serif text-4xl text-ink">Users</h1>
-        <p className="mt-2 text-ink/60">
-          Admin accounts that can sign in. At least one account has to stay.
+        <p className="mt-2 max-w-2xl text-ink/60">
+          Accounts that can sign in. Admins can change the workspace. Viewers can
+          open the dashboard and reports and cannot change anything. At least one
+          admin who can make changes has to stay.
         </p>
       </div>
 
       <form
         action={createAction}
-        className="mt-8 flex flex-col gap-3 rounded-2xl border border-ink/10 bg-white/70 p-4 sm:flex-row sm:items-end"
+        className="mt-8 flex flex-col gap-3 rounded-2xl border border-ink/10 bg-white/70 p-4 sm:flex-row sm:flex-wrap sm:items-end"
       >
         <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm">
           <span className="text-ink/60">Email</span>
@@ -64,19 +72,33 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
             className="h-10 rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30"
           />
         </label>
+        <label className="flex w-full flex-col gap-1.5 text-sm sm:w-36">
+          <span className="text-ink/60">Access</span>
+          <select
+            name="role"
+            defaultValue="admin"
+            className="h-10 rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30"
+          >
+            <option value="admin">Admin</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </label>
         <button
           type="submit"
           disabled={createPending || dbError}
           className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-4 text-sm font-medium text-paper transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {createPending ? "Adding…" : "Add admin"}
+          {createPending ? "Adding…" : "Add account"}
         </button>
         {createState?.error ? (
           <p className="text-sm text-rose-800 sm:basis-full">{createState.error}</p>
         ) : createState?.ok ? (
-          <p className="text-sm text-ink/55 sm:basis-full">Admin added.</p>
+          <p className="text-sm text-ink/55 sm:basis-full">Account added.</p>
         ) : (
-          <p className="text-xs text-ink/40 sm:basis-full">Password needs at least 8 characters.</p>
+          <p className="text-xs text-ink/40 sm:basis-full">
+            Password needs at least 8 characters. A viewer can open the dashboard
+            and reports and cannot change anything.
+          </p>
         )}
       </form>
 
@@ -101,10 +123,11 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
           <p className="text-ink/70">No admins match that email.</p>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
-            <table className="w-full min-w-[36rem] text-left text-sm">
+            <table className="w-full min-w-[48rem] text-left text-sm">
               <thead className="border-b border-ink/10 text-ink/45">
                 <tr>
                   <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Access</th>
                   <th className="px-4 py-3 font-medium">Added</th>
                   <th className="px-4 py-3 font-medium"></th>
                 </tr>
@@ -112,7 +135,8 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
               <tbody>
                 {filtered.map((account) => {
                   const isYou = account.id === currentId;
-                  const onlyOne = accounts.length === 1;
+                  const lastAdmin = account.role === "admin" && adminCount <= 1;
+                  const lastAccount = accounts.length === 1;
                   return (
                     <tr key={account.id} className="border-t border-ink/5">
                       <td className="px-4 py-3 font-medium text-ink">
@@ -123,11 +147,20 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
                           </span>
                         ) : null}
                       </td>
+                      <td className="px-4 py-3">
+                        <RoleForm
+                          key={`${account.id}-${account.role}`}
+                          id={account.id}
+                          email={account.email}
+                          role={account.role}
+                          locked={isYou || lastAdmin}
+                        />
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-ink/70">
                         {formatDate(account.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {isYou || onlyOne ? (
+                        {isYou || lastAdmin || lastAccount ? (
                           <span className="text-xs text-ink/40">
                             {isYou ? "Signed in" : "Last admin"}
                           </span>
@@ -144,6 +177,48 @@ export function UsersPanel({ accounts, currentId, dbError }: UsersPanelProps) {
         )}
       </section>
     </>
+  );
+}
+
+function RoleForm({
+  id,
+  email,
+  role,
+  locked,
+}: {
+  id: string;
+  email: string;
+  role: AdminRole;
+  locked: boolean;
+}) {
+  const [state, action, pending] = useActionState<UserActionState, FormData>(
+    setAdminRoleAction,
+    null,
+  );
+  if (locked) {
+    return <span className="text-ink/70">{adminRoleLabel(role)}</span>;
+  }
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="id" value={id} />
+      <select
+        name="role"
+        defaultValue={role}
+        aria-label={`Access for ${email}`}
+        className="h-8 rounded-lg border border-ink/10 bg-white px-2 text-sm text-ink outline-none focus:border-ink/30"
+      >
+        <option value="admin">Admin</option>
+        <option value="viewer">Viewer</option>
+      </select>
+      <button
+        type="submit"
+        disabled={pending}
+        className="inline-flex h-8 items-center rounded-full border border-ink/15 px-3 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-50"
+      >
+        {pending ? "Saving…" : "Save"}
+      </button>
+      {state?.error ? <p className="text-xs text-rose-800">{state.error}</p> : null}
+    </form>
   );
 }
 

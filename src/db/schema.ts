@@ -77,6 +77,7 @@ export const admins = pgTable("admins", {
   totpSecret: text("totp_secret"),
   totpEnabled: boolean("totp_enabled").notNull().default(false),
   totpLastStep: integer("totp_last_step"),
+  role: text("role").$type<"admin" | "viewer">().notNull().default("admin"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

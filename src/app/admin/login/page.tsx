@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { hasAdminSession } from "@/lib/admin";
+import { getAdminSessionUser } from "@/lib/admin";
+import { adminLandingPath } from "@/lib/admin-role";
 import { TOTP_CHALLENGE_COOKIE, readTotpChallenge } from "@/lib/totp-challenge";
 import { LoginForm } from "./login-form";
 
@@ -11,11 +12,11 @@ type LoginPageProps = {
 };
 
 export default async function AdminLoginPage({ searchParams }: LoginPageProps) {
-  if (await hasAdminSession()) {
-    redirect("/admin");
-  }
-
   const { next } = await searchParams;
+  const admin = await getAdminSessionUser();
+  if (admin) {
+    redirect(admin.role === "admin" ? "/admin" : adminLandingPath("viewer", next ?? null));
+  }
   let challengeEmail: string | null = null;
   try {
     const jar = await cookies();

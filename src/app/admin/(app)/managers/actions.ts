@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { recordAudit } from "@/db/audit-log";
 import { setManagerPortalPassword } from "@/db/manager-accounts";
@@ -12,7 +11,8 @@ import {
   listManagerAssignments,
   unassignManager,
 } from "@/db/managers";
-import { getAdminSessionUser } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 
 export type ManagerActionState = {
   ok: boolean;
@@ -34,9 +34,9 @@ export async function assignManagerAction(
   _prev: ManagerActionState,
   formData: FormData,
 ): Promise<ManagerActionState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/managers");
   if (!actor) {
-    redirect("/admin/login?next=/admin/managers");
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const teamId = idSchema.safeParse(String(formData.get("teamId") ?? ""));
   const employeeId = idSchema.safeParse(String(formData.get("employeeId") ?? ""));
@@ -69,9 +69,9 @@ export async function unassignManagerAction(
   _prev: ManagerActionState,
   formData: FormData,
 ): Promise<ManagerActionState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/managers");
   if (!actor) {
-    redirect("/admin/login?next=/admin/managers");
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const teamId = idSchema.safeParse(String(formData.get("teamId") ?? ""));
   if (!teamId.success) {
@@ -103,9 +103,9 @@ export async function setManagerPortalPasswordAction(
   _prev: ManagerActionState,
   formData: FormData,
 ): Promise<ManagerActionState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/managers");
   if (!actor) {
-    redirect("/admin/login?next=/admin/managers");
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const employeeId = idSchema.safeParse(String(formData.get("employeeId") ?? ""));
   const password = String(formData.get("password") ?? "");

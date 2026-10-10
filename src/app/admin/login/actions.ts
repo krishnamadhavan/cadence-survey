@@ -3,6 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { consumeAdminTotp } from "@/db/admin-totp";
+import { landingPathForAdmin } from "@/lib/admin";
 import {
   ADMIN_LOGIN_CODE_EXPIRED,
   ADMIN_LOGIN_CODE_INVALID,
@@ -36,13 +37,6 @@ export type LoginState = {
   step?: "code" | "password";
   email?: string;
 } | null;
-
-function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/admin")) {
-    return "/admin";
-  }
-  return raw;
-}
 
 async function clearChallengeCookie() {
   const jar = await cookies();
@@ -132,7 +126,7 @@ async function loginWithPassword(formData: FormData): Promise<LoginState> {
   } catch {
     jar.set(TOTP_CHALLENGE_COOKIE, "", totpChallengeCookieClearOptions());
   }
-  redirect(safeNext(String(formData.get("next") ?? "")));
+  redirect(await landingPathForAdmin(gate.adminId, String(formData.get("next") ?? "")));
 }
 
 async function loginWithCode(formData: FormData): Promise<LoginState> {
@@ -215,7 +209,9 @@ async function loginWithCode(formData: FormData): Promise<LoginState> {
   } catch {
     // The code is already spent. The challenge expires on its own.
   }
-  redirect(safeNext(String(formData.get("next") ?? "")));
+  redirect(
+    await landingPathForAdmin(challenge.adminId, String(formData.get("next") ?? "")),
+  );
 }
 
 export async function logoutAdmin() {

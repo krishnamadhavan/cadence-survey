@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { importEmployeesFromCsv } from "@/db/employees";
-import { requireAdminApi } from "@/lib/admin";
+import { requireWorkspaceWriterApi } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_BODY_BYTES = MAX_FILE_BYTES + 64 * 1024;
 
 export async function POST(request: Request) {
-  const denied = await requireAdminApi(request);
+  const denied = await requireWorkspaceWriterApi(request);
   if (denied) {
     return denied;
   }
