@@ -12,6 +12,7 @@ import {
 import { recordAudit } from "@/db/audit-log";
 import {
   getResultsWebhookUrl,
+  rotateResultsWebhookSecret,
   setResultsWebhookUrl,
   SettingsValidationError,
 } from "@/db/settings";
@@ -89,6 +90,25 @@ export async function setResultsWebhookAction(
 ): Promise<IntegrationActionState> {
   const actor = await requireActor();
   const intent = String(formData.get("intent") ?? "save");
+  if (intent === "rotate") {
+    try {
+      await rotateResultsWebhookSecret();
+      await recordAudit({
+        actorId: actor.id,
+        actorEmail: actor.email,
+        action: "results_webhook.changed",
+        summary: "Rotated the results webhook secret",
+      });
+      revalidatePath("/admin/integrations");
+      revalidatePath("/admin/audit-log");
+      return { ok: true, error: null, secret: null };
+    } catch (error) {
+      if (error instanceof SettingsValidationError) {
+        return fail(error.message);
+      }
+      return fail("Could not save the webhook. Is Postgres running?");
+    }
+  }
   const raw = intent === "clear" ? "" : String(formData.get("webhookUrl") ?? "");
   try {
     const previous = await getResultsWebhookUrl();

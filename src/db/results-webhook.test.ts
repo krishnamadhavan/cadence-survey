@@ -4,11 +4,15 @@ import { inArray } from "drizzle-orm";
 import { test } from "node:test";
 import { db, pg } from "@/db/client";
 import type { PulseClosedPayload } from "@/lib/results-webhook";
+import { verifyResultsWebhook } from "@/lib/results-webhook";
 import { MIN_TEAM_RESPONSES, SUPPRESSED_TEAM_NAME } from "@/lib/min-cell";
 import {
   SettingsValidationError,
   getAnonymityFloor,
+  getResultsWebhook,
   getResultsWebhookUrl,
+  restoreResultsWebhook,
+  rotateResultsWebhookSecret,
   setAnonymityFloor,
   setResultsWebhookUrl,
 } from "@/db/settings";
@@ -29,13 +33,18 @@ const webhookUrl = "https://hooks.example/cadence";
 test("closing a pulse posts the published summary and leaves small teams out", async (t) => {
   const tokens = [token, draftToken, scheduleToken];
   const teamIds: string[] = [];
-  const posts: Array<{ url: string; body: PulseClosedPayload }> = [];
+  const posts: Array<{
+    url: string;
+    raw: string;
+    body: PulseClosedPayload;
+    signature: string;
+  }> = [];
   const originalFloor = await getAnonymityFloor();
-  const originalWebhook = await getResultsWebhookUrl();
+  const originalWebhook = await getResultsWebhook();
 
   t.after(async () => {
     setResultsWebhookSendForTests(null);
-    await setResultsWebhookUrl(originalWebhook ?? "");
+    await restoreResultsWebhook(originalWebhook);
     await setAnonymityFloor(originalFloor);
     await db.delete(surveys).where(inArray(surveys.publicToken, tokens));
     if (teamIds.length > 0) {
@@ -44,8 +53,13 @@ test("closing a pulse posts the published summary and leaves small teams out", a
     await pg.end({ timeout: 2 });
   });
 
-  setResultsWebhookSendForTests(async ({ url, body }) => {
-    posts.push({ url, body: JSON.parse(body) as PulseClosedPayload });
+  setResultsWebhookSendForTests(async ({ url, body, signature }) => {
+    posts.push({
+      url,
+      raw: body,
+      body: JSON.parse(body) as PulseClosedPayload,
+      signature,
+    });
   });
   await setAnonymityFloor(MIN_TEAM_RESPONSES);
   await setResultsWebhookUrl("");
@@ -136,6 +150,12 @@ test("closing a pulse posts the published summary and leaves small teams out", a
   assert.equal(encoded.includes(design), false);
   assert.equal(encoded.includes(operations), false);
   assert.equal("roleVisibility" in post.body, false);
+  const signing = await getResultsWebhook();
+  assert.ok(signing);
+  assert.equal(signing.url, webhookUrl);
+  assert.match(signing.secret, /^[0-9a-f]{64}$/);
+  assertSigned(post, signing.secret);
+  assert.equal(post.raw.includes(signing.secret), false);
 
   setResultsWebhookSendForTests(async () => {
     throw new Error("receiver down");
@@ -145,8 +165,13 @@ test("closing a pulse posts the published summary and leaves small teams out", a
   assert.equal(closedDespiteFailure.status, "closed");
   assert.equal(posts.length, 1);
 
-  setResultsWebhookSendForTests(async ({ url, body }) => {
-    posts.push({ url, body: JSON.parse(body) as PulseClosedPayload });
+  setResultsWebhookSendForTests(async ({ url, body, signature }) => {
+    posts.push({
+      url,
+      raw: body,
+      body: JSON.parse(body) as PulseClosedPayload,
+      signature,
+    });
   });
   const opensAt = new Date(Date.now() + 5 * 60 * 1000);
   const closesAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -157,16 +182,54 @@ test("closing a pulse posts the published summary and leaves small teams out", a
   assert.equal(scheduled.length, 1);
   assert.equal(scheduled[0]?.body.survey.status, "closed");
   assert.equal(scheduled[0]?.body.survey.responseCount, 0);
+  assert.ok(scheduled[0]);
+  assertSigned(scheduled[0], signing.secret);
   await applyDueSurveySchedules(new Date(closesAt.getTime() + 1000));
   assert.equal(
     posts.filter((item) => item.body.survey.publicToken === scheduleToken).length,
     1,
   );
 
-  assert.equal(await setResultsWebhookUrl("  "), null);
+  const kept = await getResultsWebhook();
+  assert.ok(kept);
+  assert.equal(
+    await setResultsWebhookUrl("https://hooks.example/other"),
+    "https://hooks.example/other",
+  );
+  const moved = await getResultsWebhook();
+  assert.equal(moved?.url, "https://hooks.example/other");
+  assert.equal(moved?.secret, kept.secret);
+  await rotateResultsWebhookSecret();
+  const rotated = await getResultsWebhook();
+  assert.ok(rotated);
+  assert.equal(rotated.url, "https://hooks.example/other");
+  assert.notEqual(rotated.secret, kept.secret);
   await setSurveyStatus({ token, status: "open" });
   await setSurveyStatus({ token, status: "closed" });
-  assert.equal(posts.filter((item) => item.body.survey.publicToken === token).length, 1);
+  const resigned = posts.filter((item) => item.body.survey.publicToken === token);
+  assert.equal(resigned.length, 2);
+  const latest = resigned[1];
+  assert.ok(latest);
+  assertSigned(latest, rotated.secret);
+  assert.equal(
+    verifyResultsWebhook({
+      secret: kept.secret,
+      body: latest.raw,
+      header: latest.signature,
+      now: Number(/^t=(\d+),/.exec(latest.signature)?.[1]),
+    }),
+    false,
+  );
+
+  assert.equal(await setResultsWebhookUrl("  "), null);
+  assert.equal(await getResultsWebhook(), null);
+  await assert.rejects(
+    () => rotateResultsWebhookSecret(),
+    SettingsValidationError,
+  );
+  await setSurveyStatus({ token, status: "open" });
+  await setSurveyStatus({ token, status: "closed" });
+  assert.equal(posts.filter((item) => item.body.survey.publicToken === token).length, 2);
 
   await assert.rejects(
     () => setResultsWebhookUrl("javascript:alert(1)"),
@@ -178,6 +241,32 @@ test("closing a pulse posts the published summary and leaves small teams out", a
   );
   assert.equal(await getResultsWebhookUrl(), null);
 });
+
+function assertSigned(
+  post: { raw: string; signature: string },
+  secret: string,
+) {
+  const timestamp = Number(/^t=(\d+),v1=/.exec(post.signature)?.[1]);
+  assert.equal(Number.isInteger(timestamp), true);
+  assert.equal(
+    verifyResultsWebhook({
+      secret,
+      body: post.raw,
+      header: post.signature,
+      now: timestamp,
+    }),
+    true,
+  );
+  assert.equal(
+    verifyResultsWebhook({
+      secret,
+      body: `${post.raw} `,
+      header: post.signature,
+      now: timestamp,
+    }),
+    false,
+  );
+}
 
 async function insertTeam(name: string, slug: string) {
   const [team] = await db

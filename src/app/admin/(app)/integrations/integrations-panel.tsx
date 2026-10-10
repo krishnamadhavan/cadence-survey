@@ -12,6 +12,7 @@ import {
 type IntegrationsPanelProps = {
   keys: ApiKeyListItem[];
   webhookUrl: string | null;
+  webhookSecret: string | null;
   dbError: boolean;
 };
 
@@ -20,6 +21,7 @@ type StatusFilter = "active" | "revoked" | "all";
 export function IntegrationsPanel({
   keys,
   webhookUrl,
+  webhookSecret,
   dbError,
 }: IntegrationsPanelProps) {
   const [query, setQuery] = useState("");
@@ -61,8 +63,9 @@ export function IntegrationsPanel({
       </div>
 
       <ResultsWebhookForm
-        key={webhookUrl ?? ""}
+        key={`${webhookUrl ?? ""}:${webhookSecret ?? ""}`}
         webhookUrl={webhookUrl}
+        webhookSecret={webhookSecret}
         dbError={dbError}
       />
 
@@ -177,9 +180,11 @@ export function IntegrationsPanel({
 
 function ResultsWebhookForm({
   webhookUrl,
+  webhookSecret,
   dbError,
 }: {
   webhookUrl: string | null;
+  webhookSecret: string | null;
   dbError: boolean;
 }) {
   const [state, action, pending] = useActionState<IntegrationActionState, FormData>(
@@ -195,8 +200,8 @@ function ResultsWebhookForm({
       <h2 className="font-serif text-2xl text-ink">Results webhook</h2>
       <p className="mt-2 text-sm text-ink/60">
         When a pulse closes, Cadence POSTs the published results summary to
-        this URL. A team is included only when the report can name it. Smaller
-        groups are left out.
+        this URL and signs the body. A team is included only when the report
+        can name it. Smaller groups are left out.
       </p>
       <label className="mt-4 flex flex-col gap-1.5 text-sm">
         <span className="text-ink/60">Webhook URL</span>
@@ -212,6 +217,22 @@ function ResultsWebhookForm({
           className="h-10 rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30 disabled:opacity-50"
         />
       </label>
+      {webhookSecret ? (
+        <div className="mt-4">
+          <p className="text-sm text-ink/60">Signing secret</p>
+          <div className="mt-1.5 flex items-start gap-2">
+            <p className="min-w-0 flex-1 break-all font-mono text-sm text-ink">
+              {webhookSecret}
+            </p>
+            <CopySecretButton secret={webhookSecret} />
+          </div>
+          <p className="mt-2 text-xs text-ink/45">
+            Each POST sets Cadence-Signature to t=unix seconds,v1=hex. v1 is
+            the HMAC-SHA256 of that timestamp, a period, and the raw body,
+            keyed with this secret. Reject a timestamp more than 5 minutes off.
+          </p>
+        </div>
+      ) : null}
       {state?.error ? (
         <p className="mt-3 text-sm text-rose-800">{state.error}</p>
       ) : state?.ok ? (
@@ -228,19 +249,48 @@ function ResultsWebhookForm({
           {pending ? "Saving…" : "Save"}
         </button>
         {webhookUrl ? (
-          <button
-            type="submit"
-            name="intent"
-            value="clear"
-            formNoValidate
-            disabled={pending || dbError}
-            className="inline-flex h-10 items-center rounded-full border border-ink/15 px-4 text-sm font-medium text-ink transition-colors hover:border-ink/40 disabled:opacity-50"
-          >
-            Turn off
-          </button>
+          <>
+            <button
+              type="submit"
+              name="intent"
+              value="rotate"
+              formNoValidate
+              disabled={pending || dbError}
+              className="inline-flex h-10 items-center rounded-full border border-ink/15 px-4 text-sm font-medium text-ink transition-colors hover:border-ink/40 disabled:opacity-50"
+            >
+              New secret
+            </button>
+            <button
+              type="submit"
+              name="intent"
+              value="clear"
+              formNoValidate
+              disabled={pending || dbError}
+              className="inline-flex h-10 items-center rounded-full border border-ink/15 px-4 text-sm font-medium text-ink transition-colors hover:border-ink/40 disabled:opacity-50"
+            >
+              Turn off
+            </button>
+          </>
         ) : null}
       </div>
     </form>
+  );
+}
+
+function CopySecretButton({ secret }: { secret: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(secret).then(() => {
+          setCopied(true);
+        });
+      }}
+      className="inline-flex h-8 shrink-0 items-center rounded-full border border-ink/10 px-3 text-sm text-ink transition-colors hover:bg-ink/5"
+    >
+      {copied ? "Copied" : "Copy"}
+    </button>
   );
 }
 

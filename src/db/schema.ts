@@ -43,6 +43,8 @@ export const workspaceSettings = pgTable("workspace_settings", {
   anonymityFloor: integer("anonymity_floor").notNull().default(3),
   // Published results summary is POSTed here when a pulse closes. Null sends nothing.
   webhookUrl: text("webhook_url"),
+  // HMAC key for Cadence-Signature. Cleared with the URL.
+  webhookSecret: text("webhook_secret"),
 });
 
 export const admins = pgTable("admins", {

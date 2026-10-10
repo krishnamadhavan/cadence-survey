@@ -1,4 +1,10 @@
+import { randomBytes } from "node:crypto";
+
 export class WebhookUrlError extends Error {}
+
+export function newWebhookSecret(): string {
+  return randomBytes(32).toString("hex");
+}
 
 const MAX_WEBHOOK_URL_LENGTH = 2000;
 

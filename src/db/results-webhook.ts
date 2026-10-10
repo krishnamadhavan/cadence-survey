@@ -1,16 +1,21 @@
 import { getSurveyResults } from "@/db/results";
-import { getResultsWebhookUrl } from "@/db/settings";
+import { getResultsWebhook } from "@/db/settings";
 import {
   postResultsWebhook,
   pulseClosedPayload,
+  signResultsWebhook,
 } from "@/lib/results-webhook";
 
-type SendWebhook = (input: { url: string; body: string }) => Promise<void>;
+type SendWebhook = (input: {
+  url: string;
+  body: string;
+  signature: string;
+}) => Promise<void>;
 
-let sendWebhook: SendWebhook = ({ url, body }) => postResultsWebhook(url, body);
+let sendWebhook: SendWebhook = (input) => postResultsWebhook(input);
 
 export function setResultsWebhookSendForTests(send: SendWebhook | null) {
-  sendWebhook = send ?? ((input) => postResultsWebhook(input.url, input.body));
+  sendWebhook = send ?? ((input) => postResultsWebhook(input));
 }
 
 export async function deliverClosedPulseWebhooks(
@@ -21,8 +26,8 @@ export async function deliverClosedPulseWebhooks(
   if (pending.length === 0) {
     return;
   }
-  const url = await getResultsWebhookUrl();
-  if (!url) {
+  const webhook = await getResultsWebhook();
+  if (!webhook) {
     return;
   }
   for (const token of pending) {
@@ -34,10 +39,16 @@ export async function deliverClosedPulseWebhooks(
       if (!results || results.survey.status !== "closed") {
         continue;
       }
+      const body = JSON.stringify(
+        pulseClosedPayload(results, new Date().toISOString()),
+      );
       await sendWebhook({
-        url,
-        body: JSON.stringify(
-          pulseClosedPayload(results, new Date().toISOString()),
+        url: webhook.url,
+        body,
+        signature: signResultsWebhook(
+          webhook.secret,
+          body,
+          Math.floor(Date.now() / 1000),
         ),
       });
     } catch (error) {
