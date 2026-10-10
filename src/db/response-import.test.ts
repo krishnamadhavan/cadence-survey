@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db, pg } from "@/db/client";
+import { listSegmentRoles } from "@/db/reports";
+import { getSurveyResults } from "@/db/results";
 import { admins, answers, auditEvents, questions, responses, surveys, teams } from "@/db/schema";
 import {
   importSurveyResponses,
@@ -14,9 +16,12 @@ const email = `import-${stamp}@cadence.test`;
 const closedToken = `history-${stamp}`;
 const openToken = `history-open-${stamp}`;
 const draftToken = `history-draft-${stamp}`;
+const sliceToken = `history-slice-${stamp}`;
+const engineerRole = `Historian ${stamp}`;
+const designerRole = `Archivist ${stamp}`;
 
 test("imports one response per row onto a draft or closed pulse", async (t) => {
-  const tokens = [closedToken, openToken, draftToken];
+  const tokens = [closedToken, openToken, draftToken, sliceToken];
   const teamIds: string[] = [];
 
   t.after(async () => {
@@ -160,6 +165,75 @@ test("imports one response per row onto a draft or closed pulse", async (t) => {
   });
   assert.deepEqual(draft, { ok: true, imported: 1 });
 
+  const sliceId = await insertSurvey(sliceToken, `Slice ${stamp}`, "closed");
+  await insertQuestion(sliceId, "scale", "How was the week?", 1, { min: 1, max: 5 });
+  const sliceRows = [
+    "Team,Role,Tenure,How was the week?",
+    ...Array.from(
+      { length: 3 },
+      () => `History Eng ${stamp},${engineerRole},1-3yr,5`,
+    ),
+    ...Array.from(
+      { length: 3 },
+      () => `History Eng ${stamp},${designerRole},<1yr,1`,
+    ),
+  ].join("\n");
+  const sliced = await importSurveyResponses({
+    publicToken: sliceToken,
+    csvText: sliceRows,
+    actor,
+  });
+  assert.deepEqual(sliced, { ok: true, imported: 6 });
+
+  const roles = await listSegmentRoles();
+  assert.ok(roles.includes(engineerRole));
+  assert.ok(roles.includes(designerRole));
+
+  const byRole = await getSurveyResults(sliceToken, {
+    role: engineerRole,
+    floor: 3,
+    skipSchedule: true,
+  });
+  assert.equal(byRole?.roleVisibility, "shown");
+  assert.equal(byRole?.survey.responseCount, 3);
+  assert.equal(byRole?.survey.averageScore, 5);
+
+  const byTenure = await getSurveyResults(sliceToken, {
+    tenure: "lt_1",
+    floor: 3,
+    skipSchedule: true,
+  });
+  assert.equal(byTenure?.roleVisibility, "shown");
+  assert.equal(byTenure?.survey.responseCount, 3);
+  assert.equal(byTenure?.survey.averageScore, 1);
+
+  const byTeam = await getSurveyResults(sliceToken, {
+    teamId: team.id,
+    floor: 3,
+    skipSchedule: true,
+  });
+  assert.equal(byTeam?.roleVisibility, "shown");
+  assert.equal(byTeam?.survey.responseCount, 6);
+  assert.equal(byTeam?.survey.averageScore, 3);
+
+  const byRoleAndTenure = await getSurveyResults(sliceToken, {
+    role: engineerRole,
+    tenure: "y1_3",
+    floor: 3,
+    skipSchedule: true,
+  });
+  assert.equal(byRoleAndTenure?.survey.responseCount, 3);
+  assert.equal(byRoleAndTenure?.survey.averageScore, 5);
+
+  const mismatch = await getSurveyResults(sliceToken, {
+    role: engineerRole,
+    tenure: "lt_1",
+    floor: 3,
+    skipSchedule: true,
+  });
+  assert.equal(mismatch?.roleVisibility, "empty");
+  assert.equal(mismatch?.survey.responseCount, 0);
+
   const template = await responseImportTemplateForSurvey(closedToken);
   assert.equal(template.state, "ready");
   if (template.state === "ready") {
@@ -178,6 +252,7 @@ test("imports one response per row onto a draft or closed pulse", async (t) => {
       `Imported 3 responses into History ${stamp}`,
       `Imported 3 responses into History ${stamp}`,
       `Imported 1 response into Draft ${stamp}`,
+      `Imported 6 responses into Slice ${stamp}`,
     ],
   );
   assert.ok(audits.every((row) => row.action === "responses.imported"));
