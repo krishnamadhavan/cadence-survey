@@ -127,6 +127,13 @@
       "when": 1791566819895,
       "tag": "0017_result_share",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791640687579,
+      "tag": "0018_workspace_logo",
+      "breakpoints": true
     }
   ]
 }
