@@ -13,7 +13,8 @@ export type AuditAction =
   | "anonymity_floor.changed"
   | "employees.reassigned"
   | "employees.attributes_set"
-  | "team.merged";
+  | "team.merged"
+  | "results_webhook.changed";
 
 export type AuditEvent = {
   id: string;

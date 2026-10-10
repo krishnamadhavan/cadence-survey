@@ -12,6 +12,7 @@ const actionLabel: Record<string, string> = {
   "employees.reassigned": "People moved",
   "employees.attributes_set": "Attributes set",
   "team.merged": "Team merged",
+  "results_webhook.changed": "Results webhook",
 };
 
 export function auditActionLabel(action: string): string {

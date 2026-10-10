@@ -127,6 +127,20 @@
       "when": 1791566819895,
       "tag": "0017_result_share",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791622136119,
+      "tag": "0018_webhook_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791622671221,
+      "tag": "0019_webhook_secret",
+      "breakpoints": true
     }
   ]
 }
