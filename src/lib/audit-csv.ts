@@ -16,6 +16,7 @@ const actionLabel: Record<string, string> = {
   "admin.totp_disabled": "Authenticator off",
   "results_webhook.changed": "Results webhook",
   "responses.imported": "Responses imported",
+  "workspace_logo.changed": "Workspace logo",
 };
 
 export function auditActionLabel(action: string): string {

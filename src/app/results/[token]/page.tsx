@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { WorkspaceLogo } from "@/components/workspace-logo";
 import { readSharedResults, type PublicQuestionScore } from "@/db/result-shares";
 import type { TeamHealth } from "@/db/results";
 
@@ -117,6 +118,7 @@ export default async function SharedResultsPage({ params }: SharedResultsPagePro
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-16">
+      <WorkspaceLogo />
       {children}
     </main>
   );

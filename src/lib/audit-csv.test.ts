@@ -38,4 +38,5 @@ test("audit csv lists who did what and when, newest first as given", () => {
   assert.equal(auditActionLabel("admin.totp_disabled"), "Authenticator off");
   assert.equal(auditActionLabel("results_webhook.changed"), "Results webhook");
   assert.equal(auditActionLabel("responses.imported"), "Responses imported");
+  assert.equal(auditActionLabel("workspace_logo.changed"), "Workspace logo");
 });

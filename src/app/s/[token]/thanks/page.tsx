@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WorkspaceLogo } from "@/components/workspace-logo";
 import { getSurveyByToken } from "@/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function ThanksPage({ params, searchParams }: ThanksPagePro
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 py-16">
+      <WorkspaceLogo />
       <p className="text-sm tracking-wide text-accent uppercase">Cadence</p>
       <h1 className="mt-3 font-serif text-4xl text-ink">Thank you.</h1>
       <p className="mt-4 text-base leading-7 text-ink/70">

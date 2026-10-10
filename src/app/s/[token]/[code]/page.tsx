@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { WorkspaceLogo } from "@/components/workspace-logo";
 import { readPulseLink } from "@/db/pulse-links";
 import { getSurveyByToken, listEmployeeRolesByTeam } from "@/db/queries";
 import { SurveyForm } from "../survey-form";
@@ -31,6 +32,7 @@ export default async function PersonalSurveyPage({ params }: PersonalSurveyPageP
   } catch {
     return (
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 py-16">
+        <WorkspaceLogo />
         <p className="text-ink/70">Could not reach Postgres.</p>
       </main>
     );
@@ -46,6 +48,7 @@ export default async function PersonalSurveyPage({ params }: PersonalSurveyPageP
   } catch {
     return (
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 py-16">
+        <WorkspaceLogo />
         <p className="text-ink/70">Could not reach Postgres.</p>
       </main>
     );
@@ -121,6 +124,7 @@ function Shell({
 }) {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 py-16">
+      <WorkspaceLogo />
       <p className="text-sm tracking-wide text-accent uppercase">{eyebrow}</p>
       <h1 className="mt-3 font-serif text-4xl text-ink">{title}</h1>
       {children}

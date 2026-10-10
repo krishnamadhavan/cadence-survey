@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -11,6 +12,25 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+const bytea = customType<{
+  data: Uint8Array;
+  driverData: Buffer | Uint8Array | string;
+}>({
+  dataType() {
+    return "bytea";
+  },
+  toDriver(value) {
+    return Buffer.from(value);
+  },
+  fromDriver(value) {
+    if (typeof value === "string") {
+      const hex = value.startsWith("\\x") ? value.slice(2) : value;
+      return Uint8Array.from(Buffer.from(hex, "hex"));
+    }
+    return Uint8Array.from(value);
+  },
+});
 
 export const surveyStatuses = ["draft", "open", "closed"] as const;
 export type SurveyStatus = (typeof surveyStatuses)[number];
@@ -41,6 +61,9 @@ export type AnswerValue = {
 export const workspaceSettings = pgTable("workspace_settings", {
   id: text("id").primaryKey().default("default"),
   anonymityFloor: integer("anonymity_floor").notNull().default(3),
+  logo: bytea("logo"),
+  logoContentType: text("logo_content_type"),
+  logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),
   // Published results summary is POSTed here when a pulse closes. Null sends nothing.
   webhookUrl: text("webhook_url"),
   // HMAC key for Cadence-Signature. Cleared with the URL.

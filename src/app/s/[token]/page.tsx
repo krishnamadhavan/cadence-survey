@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { WorkspaceLogo } from "@/components/workspace-logo";
 import { getSurveyByToken } from "@/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -78,6 +79,7 @@ export default async function SurveyPage({ params }: SurveyPageProps) {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 py-16">
+      <WorkspaceLogo />
       {children}
     </main>
   );
