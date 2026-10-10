@@ -14,6 +14,8 @@ export type AuditAction =
   | "employees.reassigned"
   | "employees.attributes_set"
   | "team.merged"
+  | "admin.totp_enabled"
+  | "admin.totp_disabled"
   | "results_webhook.changed";
 
 export type AuditEvent = {
