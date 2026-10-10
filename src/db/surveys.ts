@@ -49,7 +49,7 @@ export async function setSurveyStatus(input: {
   status: SurveyStatus;
   revokedResultsToken: string | null;
 }> {
-  return db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     const [survey] = await tx
       .select({
         id: surveys.id,
@@ -132,6 +132,29 @@ export async function setSurveyStatus(input: {
         "That pulse changed. Refresh and try again.",
     );
   });
+  if (updated.status === "closed") {
+    await notifyClosedPulses([updated.publicToken]);
+  }
+  return updated;
+}
+
+// results.ts imports the scheduler, so load the sender after the close commits.
+async function notifyClosedPulses(tokens: string[]): Promise<void> {
+  if (tokens.length === 0) {
+    return;
+  }
+  try {
+    const { deliverClosedPulseWebhooks } = await import("@/db/results-webhook");
+    const { getAnonymityFloor } = await import("@/db/settings");
+    await deliverClosedPulseWebhooks(tokens, {
+      floor: await getAnonymityFloor(),
+    });
+  } catch (error) {
+    console.error(
+      "Results webhook failed",
+      error instanceof Error ? error.name : "Error",
+    );
+  }
 }
 
 async function countQuestions(
@@ -301,7 +324,7 @@ function copyTitle(title: string) {
 }
 
 export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
-  await db.transaction(async (tx) => {
+  const closedTokens = await db.transaction(async (tx) => {
     const opened = await tx
       .update(surveys)
       .set({ status: "open" })
@@ -322,7 +345,7 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
     for (const survey of opened) {
       await ensurePulseLinks(survey.id, tx);
     }
-    await tx
+    const closed = await tx
       .update(surveys)
       .set({ status: "closed" })
       .where(
@@ -331,7 +354,8 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
           isNotNull(surveys.closesAt),
           lte(surveys.closesAt, now),
         ),
-      );
+      )
+      .returning({ publicToken: surveys.publicToken });
     await spawnNextPulses(tx, now);
     // An ended draft was opened above so this tick can close it. Do not open
     // the follow-up draft when that next window has already ended.
@@ -356,7 +380,9 @@ export async function applyDueSurveySchedules(now = new Date()): Promise<void> {
     for (const survey of openedFollowUps) {
       await ensurePulseLinks(survey.id, tx);
     }
+    return closed.map((survey) => survey.publicToken);
   });
+  await notifyClosedPulses(closedTokens);
 }
 
 export async function setSurveySchedule(input: {

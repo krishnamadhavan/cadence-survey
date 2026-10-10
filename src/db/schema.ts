@@ -41,6 +41,8 @@ export type AnswerValue = {
 export const workspaceSettings = pgTable("workspace_settings", {
   id: text("id").primaryKey().default("default"),
   anonymityFloor: integer("anonymity_floor").notNull().default(3),
+  // Published results summary is POSTed here when a pulse closes. Null sends nothing.
+  webhookUrl: text("webhook_url"),
 });
 
 export const admins = pgTable("admins", {

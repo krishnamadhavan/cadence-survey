@@ -5,17 +5,23 @@ import type { ApiKeyListItem } from "@/db/api-keys";
 import {
   createApiKeyAction,
   revokeApiKeyAction,
+  setResultsWebhookAction,
   type IntegrationActionState,
 } from "./actions";
 
 type IntegrationsPanelProps = {
   keys: ApiKeyListItem[];
+  webhookUrl: string | null;
   dbError: boolean;
 };
 
 type StatusFilter = "active" | "revoked" | "all";
 
-export function IntegrationsPanel({ keys, dbError }: IntegrationsPanelProps) {
+export function IntegrationsPanel({
+  keys,
+  webhookUrl,
+  dbError,
+}: IntegrationsPanelProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("active");
   const [createState, createAction, createPending] = useActionState<
@@ -53,6 +59,12 @@ export function IntegrationsPanel({ keys, dbError }: IntegrationsPanelProps) {
           The full key is shown once.
         </p>
       </div>
+
+      <ResultsWebhookForm
+        key={webhookUrl ?? ""}
+        webhookUrl={webhookUrl}
+        dbError={dbError}
+      />
 
       <form
         action={createAction}
@@ -160,6 +172,75 @@ export function IntegrationsPanel({ keys, dbError }: IntegrationsPanelProps) {
         )}
       </section>
     </>
+  );
+}
+
+function ResultsWebhookForm({
+  webhookUrl,
+  dbError,
+}: {
+  webhookUrl: string | null;
+  dbError: boolean;
+}) {
+  const [state, action, pending] = useActionState<IntegrationActionState, FormData>(
+    setResultsWebhookAction,
+    null,
+  );
+
+  return (
+    <form
+      action={action}
+      className="mt-8 max-w-xl rounded-2xl border border-ink/10 bg-white/70 p-5"
+    >
+      <h2 className="font-serif text-2xl text-ink">Results webhook</h2>
+      <p className="mt-2 text-sm text-ink/60">
+        When a pulse closes, Cadence POSTs the published results summary to
+        this URL. A team is included only when the report can name it. Smaller
+        groups are left out.
+      </p>
+      <label className="mt-4 flex flex-col gap-1.5 text-sm">
+        <span className="text-ink/60">Webhook URL</span>
+        <input
+          name="webhookUrl"
+          type="url"
+          inputMode="url"
+          autoComplete="off"
+          maxLength={2000}
+          defaultValue={webhookUrl ?? ""}
+          placeholder="https://example.com/cadence"
+          disabled={dbError}
+          className="h-10 rounded-xl border border-ink/10 bg-white px-3 text-sm text-ink outline-none focus:border-ink/30 disabled:opacity-50"
+        />
+      </label>
+      {state?.error ? (
+        <p className="mt-3 text-sm text-rose-800">{state.error}</p>
+      ) : state?.ok ? (
+        <p className="mt-3 text-sm text-ink/55">Saved.</p>
+      ) : null}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          name="intent"
+          value="save"
+          disabled={pending || dbError}
+          className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-medium text-paper transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+        {webhookUrl ? (
+          <button
+            type="submit"
+            name="intent"
+            value="clear"
+            formNoValidate
+            disabled={pending || dbError}
+            className="inline-flex h-10 items-center rounded-full border border-ink/15 px-4 text-sm font-medium text-ink transition-colors hover:border-ink/40 disabled:opacity-50"
+          >
+            Turn off
+          </button>
+        ) : null}
+      </div>
+    </form>
   );
 }
 

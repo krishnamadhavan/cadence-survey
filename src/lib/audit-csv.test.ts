@@ -34,4 +34,5 @@ test("audit csv lists who did what and when, newest first as given", () => {
     "Portal password set",
   );
   assert.equal(auditActionLabel("employees.attributes_set"), "Attributes set");
+  assert.equal(auditActionLabel("results_webhook.changed"), "Results webhook");
 });

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { workspaceSettings } from "@/db/schema";
 import { MIN_TEAM_RESPONSES } from "@/lib/min-cell";
+import { parseWebhookUrl, WebhookUrlError } from "@/lib/webhook-url";
 
 export const ANONYMITY_FLOOR_MIN = 3;
 export const ANONYMITY_FLOOR_MAX = 50;
@@ -36,4 +37,34 @@ export async function setAnonymityFloor(value: number): Promise<number> {
       set: { anonymityFloor: value },
     });
   return value;
+}
+
+export async function getResultsWebhookUrl(): Promise<string | null> {
+  const [row] = await db
+    .select({ webhookUrl: workspaceSettings.webhookUrl })
+    .from(workspaceSettings)
+    .where(eq(workspaceSettings.id, SETTINGS_ID))
+    .limit(1);
+  const url = row?.webhookUrl?.trim() ?? "";
+  return url.length > 0 ? url : null;
+}
+
+export async function setResultsWebhookUrl(raw: string): Promise<string | null> {
+  let url: string | null;
+  try {
+    url = parseWebhookUrl(raw);
+  } catch (error) {
+    if (error instanceof WebhookUrlError) {
+      throw new SettingsValidationError(error.message);
+    }
+    throw error;
+  }
+  await db
+    .insert(workspaceSettings)
+    .values({ id: SETTINGS_ID, webhookUrl: url })
+    .onConflictDoUpdate({
+      target: workspaceSettings.id,
+      set: { webhookUrl: url },
+    });
+  return url;
 }
