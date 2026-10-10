@@ -19,7 +19,11 @@ export default async function AdminAppLayout({
     (await cookies()).get("cadence_sidebar")?.value === "1";
 
   return (
-    <AdminShell email={admin.email} sidebarCollapsed={sidebarCollapsed}>
+    <AdminShell
+      email={admin.email}
+      name={admin.name}
+      sidebarCollapsed={sidebarCollapsed}
+    >
       {children}
     </AdminShell>
   );
