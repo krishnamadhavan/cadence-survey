@@ -14,6 +14,7 @@ const actionLabel: Record<string, string> = {
   "team.merged": "Team merged",
   "admin.totp_enabled": "Authenticator on",
   "admin.totp_disabled": "Authenticator off",
+  "results_webhook.changed": "Results webhook",
 };
 
 export function auditActionLabel(action: string): string {

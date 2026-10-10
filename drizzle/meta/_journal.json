@@ -131,8 +131,22 @@
     {
       "idx": 18,
       "version": "7",
-      "when": 1791630831594,
-      "tag": "0018_admin_totp",
+      "when": 1791622136119,
+      "tag": "0018_webhook_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791622671221,
+      "tag": "0019_webhook_secret",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791641957920,
+      "tag": "0020_admin_totp",
       "breakpoints": true
     }
   ]

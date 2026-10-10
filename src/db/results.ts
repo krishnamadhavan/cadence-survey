@@ -563,9 +563,13 @@ export async function getSurveyResults(
     teamId?: string | null;
     tenure?: string | null;
     floor?: number;
+    // The close webhook already committed status and must not run the scheduler again.
+    skipSchedule?: boolean;
   },
 ): Promise<SurveyResults | null> {
-  await applyDueSurveySchedules();
+  if (!options?.skipSchedule) {
+    await applyDueSurveySchedules();
+  }
   const [survey] = await db
     .select()
     .from(surveys)
