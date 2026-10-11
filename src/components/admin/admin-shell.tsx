@@ -33,6 +33,7 @@ const COLLAPSE_COOKIE = "cadence_sidebar";
 
 type AdminShellProps = {
   email: string;
+  name?: string | null;
   role: AdminRole;
   sidebarCollapsed?: boolean;
   children: React.ReactNode;
@@ -40,6 +41,7 @@ type AdminShellProps = {
 
 export function AdminShell({
   email,
+  name = null,
   role,
   sidebarCollapsed = false,
   children,
@@ -58,6 +60,7 @@ export function AdminShell({
     <div className="flex min-h-dvh flex-col bg-paper">
       <AdminTopbar
         email={email}
+        name={name}
         role={role}
         collapsed={collapsed}
         onOpenMobile={() => setOpen(true)}

@@ -21,7 +21,9 @@ export type AuditAction =
   | "results_webhook.changed"
   | "responses.imported"
   | "workspace_logo.changed"
-  | "admin.role_changed";
+  | "admin.role_changed"
+  | "admin.profile_updated"
+  | "admin.password_changed";
 
 export type AuditEvent = {
   id: string;

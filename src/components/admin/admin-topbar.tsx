@@ -7,6 +7,7 @@ import { logoutAdmin } from "@/app/admin/login/actions";
 import {
   breadcrumbs,
   initialsFromEmail,
+  initialsFromName,
   navSectionsForRole,
   sidebarWidthClass,
 } from "@/components/admin/admin-nav";
@@ -54,6 +55,7 @@ const SEARCH_EXTRAS = [
 
 type AdminTopbarProps = {
   email: string;
+  name?: string | null;
   role: AdminRole;
   collapsed: boolean;
   onOpenMobile: () => void;
@@ -61,6 +63,7 @@ type AdminTopbarProps = {
 
 export function AdminTopbar({
   email,
+  name = null,
   role,
   collapsed,
   onOpenMobile,
@@ -190,7 +193,7 @@ export function AdminTopbar({
         {role === "viewer" ? null : <QuickCreateMenu />}
         {role === "viewer" ? null : <NotificationsMenu />}
         <HelpMenu role={role} />
-        <ProfileMenu email={email} role={role} />
+        <ProfileMenu email={email} name={name} role={role} />
       </div>
 
       {searchOpen ? (
@@ -373,11 +376,19 @@ function HelpMenu({ role }: { role: AdminRole }) {
   );
 }
 
-function ProfileMenu({ email, role }: { email: string; role: AdminRole }) {
+function ProfileMenu({
+  email,
+  name,
+  role,
+}: {
+  email: string;
+  name: string | null;
+  role: AdminRole;
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
-  const initials = initialsFromEmail(email);
+  const initials = name ? initialsFromName(name) : initialsFromEmail(email);
   useDismiss(open, () => setOpen(false), rootRef);
 
   return (
@@ -403,7 +414,14 @@ function ProfileMenu({ email, role }: { email: string; role: AdminRole }) {
             <p className="text-[10px] font-semibold tracking-[0.16em] text-ink/40 uppercase">
               Signed in
             </p>
-            <p className="mt-1 truncate text-sm font-medium text-ink">{email}</p>
+            {name ? (
+              <>
+                <p className="mt-1 truncate text-sm font-medium text-ink">{name}</p>
+                <p className="truncate text-xs text-ink/50">{email}</p>
+              </>
+            ) : (
+              <p className="mt-1 truncate text-sm font-medium text-ink">{email}</p>
+            )}
             {role === "viewer" ? (
               <p className="mt-0.5 text-xs text-ink/45">View only</p>
             ) : null}

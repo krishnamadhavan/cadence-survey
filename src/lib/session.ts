@@ -65,6 +65,14 @@ export async function destroySessionsForAdmin(adminId: string): Promise<void> {
   await destroySessionsMatching("session:admin:*", adminId);
 }
 
+export async function destroyOtherAdminSessions(
+  adminId: string,
+  keepToken: string | null | undefined,
+): Promise<void> {
+  const keepKey = keepToken ? sessionKey(keepToken) : null;
+  await destroySessionsMatching("session:admin:*", adminId, keepKey);
+}
+
 export async function createManagerSession(
   employeeId: string,
   store: SessionStore = redis,
@@ -90,7 +98,11 @@ export async function destroySessionsForManager(employeeId: string): Promise<voi
   await destroySessionsMatching("session:manager:*", employeeId);
 }
 
-async function destroySessionsMatching(pattern: string, subjectId: string): Promise<void> {
+async function destroySessionsMatching(
+  pattern: string,
+  subjectId: string,
+  keepKey: string | null = null,
+): Promise<void> {
   let cursor = "0";
   do {
     const [next, keys] = (await redis.scan(
@@ -105,7 +117,9 @@ async function destroySessionsMatching(pattern: string, subjectId: string): Prom
       continue;
     }
     const values = await redis.mget(...keys);
-    const stale = keys.filter((key, index) => values[index] === subjectId);
+    const stale = keys.filter(
+      (key, index) => values[index] === subjectId && key !== keepKey,
+    );
     if (stale.length > 0) {
       await redis.del(...stale);
     }

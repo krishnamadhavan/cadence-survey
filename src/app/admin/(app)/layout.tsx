@@ -25,6 +25,7 @@ export default async function AdminAppLayout({
   return (
     <AdminShell
       email={admin.email}
+      name={admin.name}
       role={admin.role}
       sidebarCollapsed={sidebarCollapsed}
     >

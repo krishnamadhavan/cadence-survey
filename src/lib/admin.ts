@@ -24,6 +24,7 @@ export { VIEW_ONLY_MESSAGE };
 export type AdminSessionUser = {
   id: string;
   email: string;
+  name: string | null;
   role: AdminRole;
 };
 
@@ -36,23 +37,35 @@ export async function getAdminSessionUser(): Promise<AdminSessionUser | null> {
     }
     try {
       const [admin] = await db
-        .select({ id: admins.id, email: admins.email, role: admins.role })
+        .select({
+          id: admins.id,
+          email: admins.email,
+          name: admins.name,
+          role: admins.role,
+        })
         .from(admins)
         .where(eq(admins.id, session.adminId))
         .limit(1);
       if (!admin) {
         return null;
       }
+      const name = admin.name?.trim() ?? "";
       return {
         id: admin.id,
         email: admin.email,
+        name: name || null,
         role: coerceAdminRole(admin.role),
       };
     } catch (error) {
       if (error instanceof SessionStoreUnavailable) {
         return null;
       }
-      return { id: session.adminId, email: "Admin", role: "viewer" };
+      return {
+        id: session.adminId,
+        email: "Admin",
+        name: null,
+        role: "viewer",
+      };
     }
   } catch (error) {
     if (error instanceof SessionStoreUnavailable) {

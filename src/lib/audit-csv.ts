@@ -18,6 +18,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "responses.imported": "Responses imported",
   "workspace_logo.changed": "Workspace logo",
   "admin.role_changed": "Admin role",
+  "admin.profile_updated": "Profile updated",
+  "admin.password_changed": "Password changed",
 };
 
 export function auditActionLabel(action: string): string {
