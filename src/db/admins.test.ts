@@ -1,6 +1,6 @@
 import "./../lib/load-env";
 import assert from "node:assert/strict";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, not } from "drizzle-orm";
 import { test } from "node:test";
 import {
   AdminConflictError,
@@ -10,6 +10,7 @@ import {
   createAdmin,
   deleteAdmin,
   listAdmins,
+  setAdminRole,
 } from "@/db/admins";
 import { db, pg } from "@/db/client";
 import { admins } from "@/db/schema";
@@ -19,10 +20,19 @@ import { redis } from "@/lib/redis";
 const stamp = Date.now();
 const emailA = `admin-a-${stamp}@cadence.test`;
 const emailB = `admin-b-${stamp}@cadence.test`;
+const emailV = `admin-v-${stamp}@cadence.test`;
+const emailC = `admin-c-${stamp}@cadence.test`;
 
 test("create, list, and remove admins without dropping the last account", async (t) => {
-  const emails = [emailA, emailB];
+  const emails = [emailA, emailB, emailV, emailC];
+  const outsiders = await db
+    .select({ id: admins.id, role: admins.role })
+    .from(admins)
+    .where(not(inArray(admins.email, emails)));
   t.after(async () => {
+    for (const row of outsiders) {
+      await db.update(admins).set({ role: row.role }).where(eq(admins.id, row.id));
+    }
     await db.delete(admins).where(inArray(admins.email, emails));
     await pg.end({ timeout: 2 });
     await redis.quit();
@@ -33,6 +43,7 @@ test("create, list, and remove admins without dropping the last account", async 
     password: "a-long-password",
   });
   assert.equal(created.email, emailA);
+  assert.equal(created.role, "admin");
   const signedIn = await verifyAdminCredentials(emailA, "a-long-password");
   assert.equal(signedIn?.id, created.id);
 
@@ -66,9 +77,25 @@ test("create, list, and remove admins without dropping the last account", async 
     false,
   );
 
-  assert.equal(adminDeletionBlock([created.id], created.id, "other"), "last");
-  assert.equal(adminDeletionBlock([created.id, second.id], created.id, created.id), "self");
-  assert.equal(adminDeletionBlock([created.id], "missing", created.id), "missing");
+  assert.equal(
+    adminDeletionBlock([{ id: created.id, role: "admin" }], created.id, "other"),
+    "last",
+  );
+  assert.equal(
+    adminDeletionBlock(
+      [
+        { id: created.id, role: "admin" },
+        { id: second.id, role: "admin" },
+      ],
+      created.id,
+      created.id,
+    ),
+    "self",
+  );
+  assert.equal(
+    adminDeletionBlock([{ id: created.id, role: "admin" }], "missing", created.id),
+    "missing",
+  );
 
   await assert.rejects(
     () => deleteAdmin({ id: created.id, actorId: created.id }),
@@ -89,4 +116,125 @@ test("create, list, and remove admins without dropping the last account", async 
       }),
     AdminNotFoundError,
   );
+
+  await assert.rejects(
+    () => createAdmin({ email: emailV, password: "a-long-password", role: "owner" }),
+    (error: unknown) => {
+      assert.ok(error instanceof AdminValidationError);
+      assert.equal(error.message, "Choose full access or viewer.");
+      return true;
+    },
+  );
+
+  const viewer = await createAdmin({
+    email: emailV,
+    password: "a-long-password",
+    role: "viewer",
+  });
+  assert.equal(viewer.role, "viewer");
+  const withViewer = await listAdmins();
+  assert.equal(withViewer.find((account) => account.id === viewer.id)?.role, "viewer");
+  assert.equal(
+    adminDeletionBlock(
+      [
+        { id: created.id, role: "admin" },
+        { id: viewer.id, role: "viewer" },
+      ],
+      viewer.id,
+      created.id,
+    ),
+    null,
+  );
+  assert.equal(
+    adminDeletionBlock(
+      [
+        { id: created.id, role: "admin" },
+        { id: viewer.id, role: "viewer" },
+      ],
+      created.id,
+      "other-actor",
+    ),
+    "last",
+  );
+
+  await db
+    .update(admins)
+    .set({ role: "viewer" })
+    .where(not(inArray(admins.email, emails)));
+  try {
+    await assert.rejects(
+      () => deleteAdmin({ id: created.id, actorId: viewer.id }),
+      (error: unknown) => {
+        assert.ok(error instanceof AdminValidationError);
+        assert.equal(error.message, "Keep at least one account with full access.");
+        return true;
+      },
+    );
+    await assert.rejects(
+      () => setAdminRole({ id: created.id, actorId: viewer.id, role: "viewer" }),
+      (error: unknown) => {
+        assert.ok(error instanceof AdminValidationError);
+        assert.equal(error.message, "Keep at least one account with full access.");
+        return true;
+      },
+    );
+  } finally {
+    for (const row of outsiders) {
+      await db.update(admins).set({ role: row.role }).where(eq(admins.id, row.id));
+    }
+  }
+  await assert.rejects(
+    () => setAdminRole({ id: created.id, actorId: created.id, role: "viewer" }),
+    (error: unknown) => {
+      assert.ok(error instanceof AdminValidationError);
+      assert.equal(error.message, "You can't change your own access.");
+      return true;
+    },
+  );
+
+  const third = await createAdmin({
+    email: emailC,
+    password: "another-long-password",
+  });
+  assert.equal(third.role, "admin");
+  await assert.rejects(
+    () => setAdminRole({ id: third.id, actorId: created.id, role: "owner" }),
+    (error: unknown) => {
+      assert.ok(error instanceof AdminValidationError);
+      assert.equal(error.message, "Choose full access or viewer.");
+      return true;
+    },
+  );
+  const demoted = await setAdminRole({
+    id: third.id,
+    actorId: created.id,
+    role: "viewer",
+  });
+  assert.equal(demoted.changed, true);
+  assert.equal(demoted.email, emailC);
+  assert.equal(demoted.role, "viewer");
+  const unchanged = await setAdminRole({
+    id: third.id,
+    actorId: created.id,
+    role: "viewer",
+  });
+  assert.equal(unchanged.changed, false);
+  const promoted = await setAdminRole({
+    id: third.id,
+    actorId: created.id,
+    role: "admin",
+  });
+  assert.equal(promoted.changed, true);
+  assert.equal(promoted.role, "admin");
+  assert.equal(
+    (await listAdmins()).find((account) => account.id === third.id)?.role,
+    "admin",
+  );
+
+  await deleteAdmin({ id: viewer.id, actorId: created.id });
+  await deleteAdmin({ id: third.id, actorId: created.id });
+  const remaining = await listAdmins();
+  assert.equal(remaining.some((account) => account.id === viewer.id), false);
+  assert.equal(remaining.some((account) => account.id === third.id), false);
+  assert.equal(remaining.some((account) => account.id === created.id), true);
 });

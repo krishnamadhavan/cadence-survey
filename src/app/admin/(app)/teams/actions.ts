@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   TeamConflictError,
@@ -13,7 +12,8 @@ import {
   mergeTeams,
   updateTeam,
 } from "@/db/teams";
-import { getAdminSessionUser, hasAdminSession } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 
 export type TeamActionState = {
   ok: boolean;
@@ -39,9 +39,9 @@ export async function mergeTeamAction(
   _prev: TeamActionState,
   formData: FormData,
 ): Promise<TeamActionState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/teams");
   if (!actor) {
-    redirect("/admin/login?next=/admin/teams");
+    return fail(VIEW_ONLY_MESSAGE);
   }
   const sourceId = teamIdSchema.safeParse(String(formData.get("sourceId") ?? ""));
   const targetId = teamIdSchema.safeParse(String(formData.get("targetId") ?? ""));
@@ -72,8 +72,8 @@ export async function createTeamAction(
   _prev: TeamActionState,
   formData: FormData,
 ): Promise<TeamActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/teams");
+  if (!(await readWorkspaceWriter("/admin/teams"))) {
+    return fail(VIEW_ONLY_MESSAGE);
   }
 
   try {
@@ -92,8 +92,8 @@ export async function updateTeamAction(
   _prev: TeamActionState,
   formData: FormData,
 ): Promise<TeamActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/teams");
+  if (!(await readWorkspaceWriter("/admin/teams"))) {
+    return fail(VIEW_ONLY_MESSAGE);
   }
 
   const id = teamIdSchema.safeParse(String(formData.get("id") ?? ""));
@@ -118,8 +118,8 @@ export async function deleteTeamAction(
   _prev: TeamActionState,
   formData: FormData,
 ): Promise<TeamActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/teams");
+  if (!(await readWorkspaceWriter("/admin/teams"))) {
+    return fail(VIEW_ONLY_MESSAGE);
   }
 
   const id = teamIdSchema.safeParse(String(formData.get("id") ?? ""));

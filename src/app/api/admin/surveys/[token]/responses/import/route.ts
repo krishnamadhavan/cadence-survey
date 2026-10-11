@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { importSurveyResponses, type ResponseImportOutcome } from "@/db/response-import";
 import { db } from "@/db/client";
 import { admins } from "@/db/schema";
-import { getAdminSessionUser, readBearerToken, requireAdminApi } from "@/lib/admin";
+import { getAdminSessionUser, readBearerToken, requireWorkspaceWriterApi } from "@/lib/admin";
 import { readAdminSession } from "@/lib/session";
 import { RESPONSE_IMPORT_MAX_BYTES } from "@/lib/response-import";
 
@@ -15,7 +15,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ token: string }> },
 ) {
-  const denied = await requireAdminApi(request);
+  const denied = await requireWorkspaceWriterApi(request);
   if (denied) {
     return denied;
   }

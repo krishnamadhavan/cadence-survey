@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   EmployeeAttributeError,
@@ -10,7 +9,8 @@ import {
   reassignEmployees,
   updateEmployeeAttributes,
 } from "@/db/employees";
-import { getAdminSessionUser, hasAdminSession } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 
 export type ImportState = {
   created: number;
@@ -32,9 +32,9 @@ export async function reassignEmployeesAction(
   _prev: MoveState,
   formData: FormData,
 ): Promise<MoveState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/employees");
   if (!actor) {
-    redirect("/admin/login?next=/admin/employees");
+    return { ok: false, error: VIEW_ONLY_MESSAGE, moved: 0, teamName: null };
   }
   const teamId = idSchema.safeParse(String(formData.get("teamId") ?? ""));
   const employeeIds = formData
@@ -80,9 +80,9 @@ export async function updateEmployeeAttributesAction(
   _prev: AttributeState,
   formData: FormData,
 ): Promise<AttributeState> {
-  const actor = await getAdminSessionUser();
+  const actor = await readWorkspaceWriter("/admin/employees");
   if (!actor) {
-    redirect("/admin/login?next=/admin/employees");
+    return { ok: false, error: VIEW_ONLY_MESSAGE };
   }
   const employeeId = idSchema.safeParse(String(formData.get("employeeId") ?? ""));
   if (!employeeId.success) {
@@ -109,8 +109,12 @@ export async function importEmployees(
   _prev: ImportState,
   formData: FormData,
 ): Promise<ImportState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin/employees");
+  if (!(await readWorkspaceWriter("/admin/employees"))) {
+    return {
+      created: 0,
+      updated: 0,
+      errors: [{ line: 1, message: VIEW_ONLY_MESSAGE }],
+    };
   }
 
   const file = formData.get("file");

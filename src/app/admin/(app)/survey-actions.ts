@@ -18,7 +18,8 @@ import {
   SurveyValidationError,
   updateSurveyQuestion,
 } from "@/db/surveys";
-import { hasAdminSession } from "@/lib/admin";
+import { readWorkspaceWriter } from "@/lib/admin";
+import { VIEW_ONLY_MESSAGE } from "@/lib/admin-role";
 import { parseSurveyCadence } from "@/lib/survey-cadence";
 import { parseRequired } from "@/lib/template-question";
 import type { SurveyStatus } from "@/db/schema";
@@ -34,12 +35,20 @@ function fail(error: string): SurveyActionState {
   return { ok: false, error };
 }
 
+async function denyViewer(): Promise<SurveyActionState | null> {
+  if (await readWorkspaceWriter("/admin")) {
+    return null;
+  }
+  return fail(VIEW_ONLY_MESSAGE);
+}
+
 export async function setSurveyStatusAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
 
   const token = String(formData.get("token") ?? "").trim();
@@ -67,8 +76,9 @@ export async function renameSurveyAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   if (!token) {
@@ -90,8 +100,9 @@ export async function addSurveyQuestionAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   if (!token) {
@@ -110,8 +121,9 @@ export async function updateSurveyQuestionAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   const id = questionIdSchema.safeParse(String(formData.get("id") ?? ""));
@@ -131,8 +143,9 @@ export async function deleteSurveyQuestionAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   const id = questionIdSchema.safeParse(String(formData.get("id") ?? ""));
@@ -152,8 +165,9 @@ export async function moveSurveyQuestionAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   const id = questionIdSchema.safeParse(String(formData.get("id") ?? ""));
@@ -207,8 +221,9 @@ export async function duplicateSurveyAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const id = z.string().uuid().safeParse(String(formData.get("id") ?? ""));
   if (!id.success) {
@@ -243,8 +258,9 @@ export async function setSurveyScheduleAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   if (!token) {
@@ -272,8 +288,9 @@ export async function shareSurveyResultsAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   if (!token) {
@@ -299,8 +316,9 @@ export async function stopSurveyResultsShareAction(
   _prev: SurveyActionState,
   formData: FormData,
 ): Promise<SurveyActionState> {
-  if (!(await hasAdminSession())) {
-    redirect("/admin/login?next=/admin");
+  const denied = await denyViewer();
+  if (denied) {
+    return denied;
   }
   const token = readToken(formData);
   if (!token) {
