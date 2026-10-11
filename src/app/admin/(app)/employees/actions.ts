@@ -5,8 +5,10 @@ import { z } from "zod";
 import {
   EmployeeAttributeError,
   EmployeeMoveError,
+  EmployeeRemoveError,
   importEmployeesFromCsv,
   reassignEmployees,
+  removeEmployee,
   updateEmployeeAttributes,
 } from "@/db/employees";
 import { readWorkspaceWriter } from "@/lib/admin";
@@ -102,6 +104,38 @@ export async function updateEmployeeAttributesAction(
       return { ok: false, error: error.message };
     }
     return { ok: false, error: "Could not save those attributes. Is Postgres running?" };
+  }
+}
+
+export async function removeEmployeeAction(
+  _prev: AttributeState,
+  formData: FormData,
+): Promise<AttributeState> {
+  const actor = await readWorkspaceWriter("/admin/employees");
+  if (!actor) {
+    return { ok: false, error: VIEW_ONLY_MESSAGE };
+  }
+  const employeeId = idSchema.safeParse(String(formData.get("employeeId") ?? ""));
+  if (!employeeId.success) {
+    return { ok: false, error: "That person is not valid." };
+  }
+  try {
+    await removeEmployee({
+      employeeId: employeeId.data,
+      actor: { id: actor.id, email: actor.email },
+    });
+    revalidatePath("/admin/employees");
+    revalidatePath("/admin/teams");
+    revalidatePath("/admin/org-chart");
+    revalidatePath("/admin/managers");
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/admin/audit-log");
+    return { ok: true, error: null };
+  } catch (error) {
+    if (error instanceof EmployeeRemoveError) {
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: "Could not remove that person. Is Postgres running?" };
   }
 }
 

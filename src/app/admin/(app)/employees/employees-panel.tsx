@@ -5,6 +5,7 @@ import type { EmployeeListItem } from "@/db/employees";
 import { TENURE_BANDS, tenureBandLabel } from "@/lib/employee-attributes";
 import {
   reassignEmployeesAction,
+  removeEmployeeAction,
   updateEmployeeAttributesAction,
   type AttributeState,
   type MoveState,
@@ -58,18 +59,21 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pageSizeDraft, setPageSizeDraft] = useState(String(DEFAULT_PAGE_SIZE));
   const [importOpen, setImportOpen] = useState(false);
+  const [removing, setRemoving] = useState<EmployeeListItem | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const importButtonRef = useRef<HTMLButtonElement>(null);
+  const removeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [moveState, moveAction, movePending] = useActionState<MoveState, FormData>(
     reassignEmployeesAction,
     null,
   );
-
-  useEffect(() => {
+  const [seenMove, setSeenMove] = useState<MoveState>(null);
+  if (moveState !== seenMove) {
+    setSeenMove(moveState);
     if (moveState?.ok) {
       setSelected([]);
     }
-  }, [moveState]);
+  }
 
   const roles = useMemo(() => {
     const found = new Set<string>();
@@ -149,7 +153,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
           <h1 className="font-serif text-4xl text-ink">Employees</h1>
           <p className="mt-2 text-ink/60">
             Search the roster, group people by team, role, or tenure, import a
-            CSV, or move several people to another team.
+            CSV, move several people to another team, or remove someone who has left.
           </p>
         </div>
         <button
@@ -324,6 +328,9 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                     <th className="px-4 py-3 font-medium">Team</th>
                     <th className="px-4 py-3 font-medium">Role</th>
                     <th className="px-4 py-3 font-medium">Tenure</th>
+                    <th className="px-4 py-3 font-medium">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -349,6 +356,19 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                       <td className="px-4 py-3 text-ink/70">{person.email}</td>
                       <td className="px-4 py-3 text-ink/70">{person.teamName}</td>
                       <AttributeCells person={person} />
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 items-center rounded-full border border-ink/10 px-3 text-sm text-ink/70 transition-colors hover:bg-ink/5 hover:text-ink"
+                          aria-label={`Remove ${person.name}`}
+                          onClick={(event) => {
+                            removeButtonRef.current = event.currentTarget;
+                            setRemoving(person);
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -433,6 +453,17 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
           returnFocusRef={importButtonRef}
         />
       ) : null}
+      {removing ? (
+        <RemoveDialog
+          person={removing}
+          onClose={() => setRemoving(null)}
+          onRemoved={(id) => {
+            setSelected((current) => current.filter((item) => item !== id));
+            setRemoving(null);
+          }}
+          returnFocusRef={removeButtonRef}
+        />
+      ) : null}
     </>
   );
 }
@@ -485,6 +516,122 @@ function AttributeCells({ person }: { person: EmployeeListItem }) {
         </form>
       </td>
     </>
+  );
+}
+
+function RemoveDialog({
+  person,
+  onClose,
+  onRemoved,
+  returnFocusRef,
+}: {
+  person: EmployeeListItem;
+  onClose: () => void;
+  onRemoved: (id: string) => void;
+  returnFocusRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const [state, action, pending] = useActionState<AttributeState, FormData>(
+    removeEmployeeAction,
+    null,
+  );
+
+  useEffect(() => {
+    if (state?.ok) {
+      onRemoved(person.id);
+    }
+  }, [onRemoved, person.id, state]);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const returnTo = returnFocusRef.current;
+    closeRef.current?.focus();
+    return () => {
+      (returnTo ?? previous)?.focus();
+    };
+  }, [returnFocusRef]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === "Tab") {
+        trapTab(event, dialogRef.current);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4 sm:p-8">
+      <button
+        type="button"
+        aria-label="Close dialog"
+        tabIndex={-1}
+        className="absolute inset-0"
+        onClick={onClose}
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-ink/10 bg-paper shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-2">
+          <h2 id={titleId} className="font-serif text-3xl text-ink">
+            Remove {person.name}
+          </h2>
+          <button
+            ref={closeRef}
+            type="button"
+            aria-label="Close"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink/10 text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink"
+            onClick={onClose}
+          >
+            <CloseIcon />
+          </button>
+        </div>
+        <form action={action} className="flex flex-col">
+          <input type="hidden" name="employeeId" value={person.id} />
+          <div className="px-6 py-5">
+            <p className="text-sm leading-6 text-ink/70">
+              Remove <span className="font-medium text-ink">{person.name}</span> from{" "}
+              <span className="font-medium text-ink">{person.teamName}</span>? They leave
+              the roster and no longer count toward that team. Past survey answers stay.
+            </p>
+            {state?.error ? <p className="mt-3 text-sm text-rose-800">{state.error}</p> : null}
+          </div>
+          <div className="flex items-center justify-end gap-2 border-t border-ink/10 px-6 py-4">
+            <button
+              type="button"
+              className="inline-flex h-10 items-center justify-center rounded-full px-4 text-sm text-ink/60 transition-colors hover:bg-ink/5 hover:text-ink"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={pending}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-ink px-5 text-sm font-medium text-paper disabled:opacity-50"
+            >
+              {pending ? "Removing…" : "Remove"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

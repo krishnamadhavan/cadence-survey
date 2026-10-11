@@ -10,6 +10,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "api_key.revoked": "API key revoked",
   "anonymity_floor.changed": "Anonymity floor",
   "employees.reassigned": "People moved",
+  "employees.removed": "Person removed",
   "employees.attributes_set": "Attributes set",
   "team.merged": "Team merged",
   "admin.totp_enabled": "Authenticator on",

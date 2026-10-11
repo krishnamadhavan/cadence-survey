@@ -3,6 +3,7 @@ import { recordAudit } from "@/db/audit-log";
 import { db } from "@/db/client";
 import { ensureLinksForOpenSurveys } from "@/db/pulse-links";
 import { employees, teams } from "@/db/schema";
+import { destroySessionsForManager } from "@/lib/session";
 import {
   parseRole,
   parseTenureBand,
@@ -34,6 +35,7 @@ export type EmployeeImportResult = {
 
 export class EmployeeMoveError extends Error {}
 export class EmployeeAttributeError extends Error {}
+export class EmployeeRemoveError extends Error {}
 
 const MOVE_LIMIT = 500;
 
@@ -83,6 +85,48 @@ export async function reassignEmployees(input: {
     }
     return { moved: ids.length, teamName: team.name };
   });
+}
+
+export async function removeEmployee(input: {
+  employeeId: string;
+  actor?: { id: string; email: string };
+}): Promise<{ name: string; email: string; teamName: string }> {
+  const removed = await db.transaction(async (tx) => {
+    const [person] = await tx
+      .select({
+        id: employees.id,
+        name: employees.name,
+        email: employees.email,
+        teamName: teams.name,
+      })
+      .from(employees)
+      .innerJoin(teams, eq(employees.teamId, teams.id))
+      .where(eq(employees.id, input.employeeId))
+      .limit(1)
+      .for("update");
+    if (!person) {
+      throw new EmployeeRemoveError("That person is gone.");
+    }
+    await tx.delete(employees).where(eq(employees.id, person.id));
+    if (input.actor) {
+      await recordAudit(
+        {
+          actorId: input.actor.id,
+          actorEmail: input.actor.email,
+          action: "employees.removed",
+          summary: `Removed ${person.name} (${person.email}) from ${person.teamName}.`,
+        },
+        tx,
+      );
+    }
+    return person;
+  });
+  try {
+    await destroySessionsForManager(removed.id);
+  } catch {
+    // The roster row is already gone, so the next request cannot stay signed in.
+  }
+  return { name: removed.name, email: removed.email, teamName: removed.teamName };
 }
 
 export async function updateEmployeeAttributes(input: {
