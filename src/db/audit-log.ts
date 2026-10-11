@@ -14,6 +14,7 @@ export type AuditAction =
   | "api_key.revoked"
   | "anonymity_floor.changed"
   | "employees.reassigned"
+  | "employees.removed"
   | "employees.attributes_set"
   | "team.merged"
   | "admin.totp_enabled"
