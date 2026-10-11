@@ -8,6 +8,7 @@ import { listSurveyQuestions } from "@/db/surveys";
 import type { SurveyStatus } from "@/db/schema";
 import { getAnonymityFloor } from "@/db/settings";
 import { formatSurveyStatus } from "@/lib/survey-status";
+import { PulseCompletion } from "@/components/admin/pulse-completion";
 import { ExportButtons, ResponseExportLink } from "./export-buttons";
 import { Participation } from "./participation";
 import { SurveyDraftEditor } from "./survey-editor";
@@ -158,6 +159,8 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           }
         />
       </section>
+
+      <PulseCompletion participation={participation} error={participationError} />
 
       <section className="mt-12">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">

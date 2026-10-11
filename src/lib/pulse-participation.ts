@@ -85,3 +85,24 @@ export function groupParticipation(rows: ParticipationRow[]): {
 
   return { responded, total: rows.length, teams: ordered };
 }
+
+export function completionPercent(responded: number, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+  return Math.round((responded / total) * 100);
+}
+
+// Under half the team is the follow-up line. A team at exactly half is not low.
+export function completionStanding(
+  responded: number,
+  total: number,
+): "complete" | "low" | "underway" {
+  if (total > 0 && responded >= total) {
+    return "complete";
+  }
+  if (total > 0 && responded * 2 < total) {
+    return "low";
+  }
+  return "underway";
+}

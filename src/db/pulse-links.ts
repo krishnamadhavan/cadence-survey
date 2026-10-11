@@ -132,6 +132,7 @@ export async function listPulseLinks(surveyToken: string): Promise<PulseLinkList
 
 export async function listPulseParticipation(
   surveyToken: string,
+  options?: { issue?: boolean },
 ): Promise<PulseParticipation | null> {
   const [survey] = await db
     .select({ id: surveys.id, status: surveys.status })
@@ -144,7 +145,9 @@ export async function listPulseParticipation(
   if (survey.status === "draft") {
     return { issued: false, responded: 0, total: 0, teams: [] };
   }
-  if (survey.status === "open") {
+  // Reports only read links that already exist. Opening a pulse, and importing
+  // people, are what create the missing ones.
+  if (survey.status === "open" && options?.issue !== false) {
     await ensurePulseLinks(survey.id);
   }
 

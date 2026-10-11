@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { groupParticipation, type ParticipationRow } from "./pulse-participation";
+import {
+  completionPercent,
+  completionStanding,
+  groupParticipation,
+  type ParticipationRow,
+} from "./pulse-participation";
 
 test("participation lists the teams furthest behind first", () => {
   const rows: ParticipationRow[] = [
@@ -65,6 +70,16 @@ test("equal progress puts the team with more people still waiting first", () => 
     grouped.teams.map((team) => team.teamName),
     ["Large", "Small"],
   );
+});
+
+test("completion is low when under half the team has answered", () => {
+  assert.equal(completionPercent(1, 8), 13);
+  assert.equal(completionPercent(0, 0), 0);
+  assert.equal(completionStanding(0, 8), "low");
+  assert.equal(completionStanding(3, 8), "low");
+  assert.equal(completionStanding(4, 8), "underway");
+  assert.equal(completionStanding(8, 8), "complete");
+  assert.equal(completionStanding(0, 0), "underway");
 });
 
 function person(

@@ -102,6 +102,16 @@ test("participation counts who has answered on each team", async (t) => {
     teamById(closedView.teams, design).waiting.map((person) => person.email),
     [bea.email],
   );
+
+  const quietToken = `part-quiet-${stamp}`;
+  const quietId = await insertSurvey(quietToken, "open");
+  const quiet = await listPulseParticipation(quietToken, { issue: false });
+  assert.deepEqual(quiet, { issued: true, responded: 0, total: 0, teams: [] });
+  const quietRows = await db
+    .select({ id: pulseLinks.id })
+    .from(pulseLinks)
+    .where(eq(pulseLinks.surveyId, quietId));
+  assert.equal(quietRows.length, 0);
 });
 
 function teamById<T extends { teamId: string }>(teamsView: T[], teamId: string): T {

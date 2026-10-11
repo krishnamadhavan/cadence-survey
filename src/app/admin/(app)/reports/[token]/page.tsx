@@ -7,6 +7,8 @@ import {
 import { ResponseImportForm } from "@/app/admin/(app)/s/[token]/response-import-form";
 import { ResultShare } from "@/app/admin/(app)/s/[token]/result-share";
 import { ReportFilters } from "@/app/admin/(app)/reports/[token]/report-filters";
+import { PulseCompletion } from "@/components/admin/pulse-completion";
+import { listPulseParticipation } from "@/db/pulse-links";
 import { getResultShareToken } from "@/db/result-shares";
 import { getSurveyReportDetail } from "@/db/reports";
 import { getAnonymityFloor } from "@/db/settings";
@@ -68,6 +70,16 @@ export default async function ReportDetailPage({
   }
   if (!detail) {
     notFound();
+  }
+
+  let completion: Awaited<ReturnType<typeof listPulseParticipation>> = null;
+  let completionError = false;
+  try {
+    completion = await listPulseParticipation(detail.selected.publicToken, {
+      issue: false,
+    });
+  } catch {
+    completionError = true;
   }
 
   const { selected, previous, results, previousResults, employeeCount } =
@@ -216,6 +228,12 @@ export default async function ReportDetailPage({
           </p>
         </div>
       </section>
+
+      <PulseCompletion
+        participation={completion}
+        error={completionError}
+        filtered={Boolean(label)}
+      />
 
       {publishable ? (
       <>
