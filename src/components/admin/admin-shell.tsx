@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   isActivePath,
-  NAV_SECTIONS,
+  navSectionsForRole,
   sidebarWidthClass,
 } from "@/components/admin/admin-nav";
 import { AdminTopbar } from "@/components/admin/admin-topbar";
+import type { AdminRole } from "@/lib/admin-role";
 
 const NAV_ICONS: Record<string, () => React.ReactNode> = {
   "/admin/dashboard": DashboardIcon,
@@ -33,6 +34,7 @@ const COLLAPSE_COOKIE = "cadence_sidebar";
 type AdminShellProps = {
   email: string;
   name?: string | null;
+  role: AdminRole;
   sidebarCollapsed?: boolean;
   children: React.ReactNode;
 };
@@ -40,6 +42,7 @@ type AdminShellProps = {
 export function AdminShell({
   email,
   name = null,
+  role,
   sidebarCollapsed = false,
   children,
 }: AdminShellProps) {
@@ -58,6 +61,7 @@ export function AdminShell({
       <AdminTopbar
         email={email}
         name={name}
+        role={role}
         collapsed={collapsed}
         onOpenMobile={() => setOpen(true)}
       />
@@ -81,7 +85,7 @@ export function AdminShell({
             aria-label="Admin"
             className="flex flex-1 flex-col overflow-y-auto px-2 py-2"
           >
-            {NAV_SECTIONS.map((section, index) => (
+            {navSectionsForRole(role).map((section, index) => (
               <div
                 key={section.id}
                 role="group"

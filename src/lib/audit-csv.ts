@@ -1,6 +1,6 @@
 import { sanitizeSpreadsheetValue } from "@/lib/spreadsheet";
 
-const actionLabel: Record<string, string> = {
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "admin.added": "Admin added",
   "admin.removed": "Admin removed",
   "manager.assigned": "Manager assigned",
@@ -17,12 +17,13 @@ const actionLabel: Record<string, string> = {
   "results_webhook.changed": "Results webhook",
   "responses.imported": "Responses imported",
   "workspace_logo.changed": "Workspace logo",
+  "admin.role_changed": "Admin role",
   "admin.profile_updated": "Profile updated",
   "admin.password_changed": "Password changed",
 };
 
 export function auditActionLabel(action: string): string {
-  return actionLabel[action] ?? action;
+  return AUDIT_ACTION_LABELS[action] ?? action;
 }
 
 export type AuditCsvRow = {

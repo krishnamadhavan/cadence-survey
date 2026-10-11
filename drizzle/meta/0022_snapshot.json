@@ -1,5 +1,5 @@
 {
-  "id": "675f6703-060e-4f35-b0ad-9a82cc836793",
+  "id": "b8181a01-de34-4371-9b5a-848f002524fe",
   "prevId": "399827a5-f437-4b8a-842c-601503bf1914",
   "version": "7",
   "dialect": "postgresql",
@@ -156,12 +156,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "password_hash": {
           "name": "password_hash",
           "type": "text",
@@ -186,6 +180,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'admin'"
         },
         "created_at": {
           "name": "created_at",

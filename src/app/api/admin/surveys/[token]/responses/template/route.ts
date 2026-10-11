@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { responseImportTemplateForSurvey } from "@/db/response-import";
-import { requireAdminApi } from "@/lib/admin";
+import { requireWorkspaceWriterApi } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ token: string }> },
 ) {
-  const denied = await requireAdminApi(request);
+  const denied = await requireWorkspaceWriterApi(request);
   if (denied) {
     return denied;
   }

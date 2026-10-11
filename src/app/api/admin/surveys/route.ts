@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { listSurveysForAdmin } from "@/db/queries";
-import { requireAdminApi } from "@/lib/admin";
+import { requireWorkspaceWriterApi } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = await requireAdminApi(request);
+  const denied = await requireWorkspaceWriterApi(request);
   if (denied) {
     return denied;
   }

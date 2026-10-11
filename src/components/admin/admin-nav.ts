@@ -1,3 +1,7 @@
+import type { AdminRole } from "@/lib/admin-role";
+
+const VIEWER_NAV = new Set(["/admin/dashboard", "/admin/reports"]);
+
 export function sidebarWidthClass(collapsed: boolean) {
   return collapsed ? "w-56 md:w-16" : "w-56";
 }
@@ -60,6 +64,16 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     ],
   },
 ];
+
+export function navSectionsForRole(role: AdminRole): NavSectionDef[] {
+  if (role !== "viewer") {
+    return NAV_SECTIONS;
+  }
+  return NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => VIEWER_NAV.has(item.href)),
+  })).filter((section) => section.items.length > 0);
+}
 
 export const NAV_ITEMS = NAV_SECTIONS.flatMap((section) =>
   section.items.map((item) => ({ ...item, section: section.label })),

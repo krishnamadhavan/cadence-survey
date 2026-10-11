@@ -39,6 +39,7 @@ test("audit csv lists who did what and when, newest first as given", () => {
   assert.equal(auditActionLabel("results_webhook.changed"), "Results webhook");
   assert.equal(auditActionLabel("responses.imported"), "Responses imported");
   assert.equal(auditActionLabel("workspace_logo.changed"), "Workspace logo");
+  assert.equal(auditActionLabel("admin.role_changed"), "Admin role");
   assert.equal(auditActionLabel("admin.profile_updated"), "Profile updated");
   assert.equal(auditActionLabel("admin.password_changed"), "Password changed");
 });
