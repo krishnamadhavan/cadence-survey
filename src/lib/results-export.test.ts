@@ -24,6 +24,7 @@ const sample: SurveyResults = {
   teamId: null,
   teamName: null,
   tenure: null,
+  office: null,
   roleVisibility: "all",
   teams: [
     {
@@ -34,6 +35,7 @@ const sample: SurveyResults = {
       health: "low",
     },
   ],
+  offices: [],
   questions: [
     {
       id: "q1",
@@ -133,6 +135,33 @@ test("csv names team and tenure when those filters are on", () => {
   assert.match(csv, /Team,Engineering/);
   assert.match(csv, /Role,Engineer/);
   assert.match(csv, /Tenure,<1yr/);
+});
+
+test("csv names the office and lists each office score", () => {
+  const csv = buildResultsCsv(
+    {
+      ...sample,
+      office: "London",
+      offices: [
+        {
+          teamId: null,
+          teamName: "London",
+          responseCount: 6,
+          averageScore: 3,
+          health: "ok",
+        },
+      ],
+      roleVisibility: "shown",
+    },
+    [],
+  );
+  assert.match(csv, /^Office,London$/m);
+  assert.match(csv, /^London,6,3\.0,Ok$/m);
+});
+
+test("resultsFilename includes the office", () => {
+  const name = resultsFilename("weekly-pulse", "csv", null, { office: "London" });
+  assert.match(name, /^weekly-pulse-London-results-\d{4}-\d{2}-\d{2}\.csv$/);
 });
 
 test("resultsFilename allowlists the token", () => {

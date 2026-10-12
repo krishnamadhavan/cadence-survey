@@ -121,6 +121,8 @@ export const teams = pgTable("teams", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
   slug: text("slug").notNull().unique(),
+  /** Current location for this team. Past responses follow it. Blank means no office. */
+  office: text("office"),
 });
 
 export const employees = pgTable(

@@ -80,6 +80,7 @@ export async function createTeamAction(
     await createTeam({
       name: String(formData.get("name") ?? ""),
       slug: String(formData.get("slug") ?? ""),
+      office: String(formData.get("office") ?? ""),
     });
     revalidateTeamPages();
     return { ok: true, error: null };
@@ -106,6 +107,7 @@ export async function updateTeamAction(
       id: id.data,
       name: String(formData.get("name") ?? ""),
       slug: String(formData.get("slug") ?? ""),
+      office: String(formData.get("office") ?? ""),
     });
     revalidateTeamPages();
     return { ok: true, error: null };

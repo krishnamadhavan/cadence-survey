@@ -29,6 +29,7 @@ type ReportDetailPageProps = {
     team?: string | string[];
     role?: string | string[];
     tenure?: string | string[];
+    office?: string | string[];
   }>;
 };
 
@@ -48,6 +49,7 @@ export default async function ReportDetailPage({
   const teamRaw = firstParam(query.team) ?? "";
   const roleRaw = firstParam(query.role) ?? "";
   const tenureRaw = firstParam(query.tenure) ?? "";
+  const officeRaw = firstParam(query.office) ?? "";
   let detail: Awaited<ReturnType<typeof getSurveyReportDetail>> | null = null;
   let shareToken: string | null = null;
   let dbError = false;
@@ -57,6 +59,7 @@ export default async function ReportDetailPage({
       teamId: teamRaw,
       role: roleRaw,
       tenure: tenureRaw,
+      office: officeRaw,
     });
     if (detail?.results.survey.status === "closed") {
       shareToken = await getResultShareToken(detail.selected.publicToken);
@@ -85,10 +88,18 @@ export default async function ReportDetailPage({
   const { selected, previous, results, previousResults, employeeCount } =
     detail;
   const roleOnly = Boolean(
-    detail.role && !detail.teamId && !detail.tenure && !teamRaw && !tenureRaw,
+    detail.role &&
+      !detail.teamId &&
+      !detail.tenure &&
+      !detail.office &&
+      !teamRaw &&
+      !tenureRaw &&
+      !officeRaw,
   );
-  const tenureOnly = Boolean(detail.tenure && !detail.role && !detail.teamId && !teamRaw);
-  const label = segmentLabel(detail, teamRaw, tenureRaw);
+  const tenureOnly = Boolean(
+    detail.tenure && !detail.role && !detail.teamId && !detail.office && !teamRaw && !officeRaw,
+  );
+  const label = segmentLabel(detail, teamRaw, tenureRaw, officeRaw);
   const anonymityFloor = await getAnonymityFloor();
   const publishable =
     results.roleVisibility === "all" || results.roleVisibility === "shown";
@@ -122,6 +133,9 @@ export default async function ReportDetailPage({
   );
   const namedTeams = results.teams.filter(
     (team) => team.teamName !== SUPPRESSED_TEAM_NAME,
+  );
+  const namedOffices = results.offices.filter(
+    (office) => office.teamName !== SUPPRESSED_TEAM_NAME,
   );
   const scaleQuestions = results.questions.filter(
     (question) => question.scale,
@@ -165,6 +179,7 @@ export default async function ReportDetailPage({
                 role={detail.role}
                 teamId={detail.teamId}
                 tenure={detail.tenure}
+                office={detail.office}
               />
               <p className="text-xs text-ink/45 sm:text-right">
                 Written comments are only in the file, and only for teams that
@@ -206,14 +221,16 @@ export default async function ReportDetailPage({
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
           Filters / segments
         </h2>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <ReportFilters
             token={selected.publicToken}
             teams={detail.teams}
             roles={detail.roles}
+            offices={detail.offices}
             teamId={detail.teamId ?? teamRaw}
             role={detail.role ?? ""}
             tenure={detail.tenure ?? tenureRaw}
+            office={detail.office ?? officeRaw}
           />
           <p className="text-xs text-ink/45">
             {label
@@ -224,7 +241,7 @@ export default async function ReportDetailPage({
                       ? " Tenure is the roster band from when the person submitted. Older answers with no band stay under All tenure."
                       : ""
                   }`
-              : `Combine team, role, and tenure. Groups under ${anonymityFloor} responses stay hidden.`}
+              : `Combine office, team, role, and tenure. Groups under ${anonymityFloor} responses stay hidden.`}
           </p>
         </div>
       </section>
@@ -521,6 +538,58 @@ export default async function ReportDetailPage({
         )}
       </section>
 
+      {results.offices.length > 0 ? (
+        <section className="mt-10">
+          <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
+            By office
+          </h2>
+          <p className="mt-1 text-sm text-ink/55">
+            Sorted worst first. Offices with fewer than {anonymityFloor}{" "}
+            responses{label ? ` in ${label}` : ""} are hidden so one person
+            cannot be identified. An office is the location set on the team now.
+          </p>
+          {namedOffices.length === 0 ? (
+            <p className="mt-4 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
+              Not enough responses per office to show a breakdown.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
+              <table className="w-full min-w-[28rem] text-left text-sm">
+                <thead className="border-b border-ink/10 text-ink/45">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Office</th>
+                    <th className="px-4 py-3 font-medium">Responses</th>
+                    <th className="px-4 py-3 font-medium">Avg score</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {namedOffices.map((office) => (
+                    <tr
+                      key={office.teamName}
+                      className="border-t border-ink/5"
+                    >
+                      <td className="px-4 py-3 font-medium text-ink">
+                        {office.teamName}
+                      </td>
+                      <td className="px-4 py-3 text-ink/70">
+                        {office.responseCount}
+                      </td>
+                      <td className="px-4 py-3 text-ink">
+                        {formatScore(office.averageScore)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <HealthBadge team={office} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
       <section className="mt-10">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
           By team
@@ -805,11 +874,16 @@ function segmentLabel(
     teamName: string | null;
     role: string | null;
     tenure: TenureBand | null;
+    office: string | null;
   },
   teamRaw: string,
   tenureRaw: string,
+  officeRaw: string,
 ): string | null {
   const parts: string[] = [];
+  if (detail.office || officeRaw) {
+    parts.push(detail.office ?? officeRaw);
+  }
   if (detail.teamId || teamRaw) {
     parts.push(detail.teamName ?? "That team");
   }

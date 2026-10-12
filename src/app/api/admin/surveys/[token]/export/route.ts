@@ -26,6 +26,7 @@ export async function GET(
   const teamId = url.searchParams.get("team");
   const role = url.searchParams.get("role");
   const tenure = url.searchParams.get("tenure");
+  const office = url.searchParams.get("office");
   if (!format) {
     return NextResponse.json(
       { error: "Use format=csv or format=xlsx." },
@@ -36,10 +37,11 @@ export async function GET(
   const rawTeam = teamId?.trim() ?? "";
   const rawRole = role?.trim() ?? "";
   const rawTenure = tenure?.trim() ?? "";
-  const roleOnly = Boolean(rawRole && !rawTeam && !rawTenure);
+  const rawOffice = office?.trim() ?? "";
+  const roleOnly = Boolean(rawRole && !rawTeam && !rawTenure && !rawOffice);
 
   try {
-    const results = await getSurveyResults(token, { teamId, role, tenure });
+    const results = await getSurveyResults(token, { teamId, role, tenure, office });
     if (!results) {
       return NextResponse.json({ error: "Survey not found." }, { status: 404 });
     }
@@ -70,10 +72,11 @@ export async function GET(
       );
     }
 
-    const comments = (await getPublishedComments(token, { teamId, role, tenure })) ?? [];
+    const comments = (await getPublishedComments(token, { teamId, role, tenure, office })) ?? [];
     const filename = resultsFilename(results.survey.publicToken, format, results.role, {
       team: results.teamId ? results.teamName || results.teamId : null,
       tenure: results.tenure ? tenureBandLabel(results.tenure) : null,
+      office: results.office,
     });
 
     if (format === "csv") {

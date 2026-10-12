@@ -2,12 +2,13 @@ import { and, asc, count, eq, inArray, isNotNull } from "drizzle-orm";
 import { recordAudit } from "@/db/audit-log";
 import { db } from "@/db/client";
 import { actionPlans, employees, responses, teams } from "@/db/schema";
-import { parseTeamName, parseTeamSlug } from "@/lib/team-slug";
+import { parseTeamName, parseTeamOffice, parseTeamSlug } from "@/lib/team-slug";
 
 export type TeamListItem = {
   id: string;
   name: string;
   slug: string;
+  office: string | null;
   employeeCount: number;
   responseCount: number;
 };
@@ -24,6 +25,7 @@ export async function listTeamsForAdmin(): Promise<TeamListItem[]> {
         id: teams.id,
         name: teams.name,
         slug: teams.slug,
+        office: teams.office,
       })
       .from(teams)
       .orderBy(asc(teams.name)),
@@ -63,9 +65,11 @@ export async function listTeamsForAdmin(): Promise<TeamListItem[]> {
 export async function createTeam(input: {
   name: string;
   slug: string;
-}): Promise<{ id: string; name: string; slug: string }> {
+  office?: string | null;
+}): Promise<{ id: string; name: string; slug: string; office: string | null }> {
   const name = parseTeamName(input.name);
   const slug = parseTeamSlug(input.slug || input.name);
+  const office = input.office === undefined ? null : requiredOffice(input.office);
   if (!name) {
     throw new TeamValidationError("Name must be 1–80 characters.");
   }
@@ -74,10 +78,11 @@ export async function createTeam(input: {
   }
 
   try {
-    const [row] = await db.insert(teams).values({ name, slug }).returning({
+    const [row] = await db.insert(teams).values({ name, slug, office }).returning({
       id: teams.id,
       name: teams.name,
       slug: teams.slug,
+      office: teams.office,
     });
     if (!row) {
       throw new Error("insert returned no team");
@@ -95,7 +100,9 @@ export async function updateTeam(input: {
   id: string;
   name: string;
   slug: string;
-}): Promise<{ id: string; name: string; slug: string }> {
+  /** Omit to leave the office unchanged. Blank clears it. */
+  office?: string | null;
+}): Promise<{ id: string; name: string; slug: string; office: string | null }> {
   const name = parseTeamName(input.name);
   const slug = parseTeamSlug(input.slug || input.name);
   if (!name) {
@@ -104,16 +111,21 @@ export async function updateTeam(input: {
   if (!slug) {
     throw new TeamValidationError("Slug needs letters or numbers.");
   }
+  const patch: { name: string; slug: string; office?: string | null } = { name, slug };
+  if (input.office !== undefined) {
+    patch.office = requiredOffice(input.office);
+  }
 
   try {
     const [row] = await db
       .update(teams)
-      .set({ name, slug })
+      .set(patch)
       .where(eq(teams.id, input.id))
       .returning({
         id: teams.id,
         name: teams.name,
         slug: teams.slug,
+        office: teams.office,
       });
     if (!row) {
       throw new TeamNotFoundError("That team is gone.");
@@ -251,6 +263,14 @@ export async function deleteTeam(id: string): Promise<void> {
   if (deleted.length === 0) {
     throw new TeamNotFoundError("That team is gone.");
   }
+}
+
+function requiredOffice(value: string | null): string | null {
+  const parsed = parseTeamOffice(value);
+  if (!parsed.ok) {
+    throw new TeamValidationError("Office must be 80 characters or fewer.");
+  }
+  return parsed.office;
 }
 
 function isUniqueViolation(error: unknown) {

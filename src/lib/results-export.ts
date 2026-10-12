@@ -57,10 +57,13 @@ export function resultsFilename(
   token: string,
   format: ExportFormat,
   role?: string | null,
-  extra?: { team?: string | null; tenure?: string | null },
+  extra?: { team?: string | null; tenure?: string | null; office?: string | null },
 ): string {
   const day = new Date().toISOString().slice(0, 10);
   const parts = [sanitizeFilenameToken(token)];
+  if (extra?.office) {
+    parts.push(sanitizeFilenameToken(extra.office));
+  }
   if (extra?.team) {
     parts.push(sanitizeFilenameToken(extra.team));
   }
@@ -75,6 +78,9 @@ export function resultsFilename(
 
 function segmentLines(results: SurveyResults): [string, string][] {
   const lines: [string, string][] = [];
+  if (results.office) {
+    lines.push(["Office", results.office]);
+  }
   if (results.teamId) {
     lines.push(["Team", results.teamName || results.teamId]);
   }
@@ -111,6 +117,21 @@ export function buildResultsCsv(
           team.responseCount,
           formatScore(team.averageScore),
           healthLabel(team.health),
+        ]),
+      );
+    }
+  }
+
+  if (results.offices.length > 0) {
+    lines.push("");
+    lines.push(csvLine(["Office", "Responses", "Average score", "Status"]));
+    for (const office of results.offices) {
+      lines.push(
+        csvLine([
+          office.teamName,
+          office.responseCount,
+          formatScore(office.averageScore),
+          healthLabel(office.health),
         ]),
       );
     }
@@ -236,6 +257,26 @@ export async function buildResultsXlsx(
   summary.addRow(["Average score", results.survey.averageScore]);
   summary.getColumn(1).width = 18;
   summary.getColumn(2).width = 40;
+
+  if (results.offices.length > 0) {
+    const offices = workbook.addWorksheet("Offices");
+    offices.addRow(["Office", "Responses", "Average score", "Status"]);
+    offices.getRow(1).font = { bold: true };
+    for (const office of results.offices) {
+      offices.addRow(
+        excelCells([
+          office.teamName,
+          office.responseCount,
+          office.averageScore,
+          healthLabel(office.health),
+        ]),
+      );
+    }
+    offices.getColumn(1).width = 28;
+    offices.getColumn(2).width = 14;
+    offices.getColumn(3).width = 16;
+    offices.getColumn(4).width = 10;
+  }
 
   const teams = workbook.addWorksheet("Teams");
   teams.addRow(["Team", "Responses", "Average score", "Status"]);

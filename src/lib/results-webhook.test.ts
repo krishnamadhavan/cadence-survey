@@ -24,11 +24,13 @@ test("closed pulse payload is the published summary", () => {
       averageScore: 4,
     },
     teams: [],
+    offices: [],
     questions: [],
     role: "Engineer",
     teamId: "team-1",
     teamName: "Engineering",
     tenure: "lt_1",
+    office: null,
     roleVisibility: "shown",
   } as SurveyResults;
 
@@ -38,6 +40,8 @@ test("closed pulse payload is the published summary", () => {
   assert.equal(body.survey.publicToken, "weekly");
   assert.equal("role" in body, false);
   assert.equal("roleVisibility" in body, false);
+  assert.equal("office" in body, false);
+  assert.equal("offices" in body, false);
   assert.equal(JSON.stringify(body).includes("Engineer"), false);
 });
 

@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
 import { applyDueSurveySchedules } from "@/db/surveys";
@@ -24,6 +24,8 @@ export { MIN_TEAM_RESPONSES, SUPPRESSED_TEAM_NAME } from "@/lib/min-cell";
 export { normalizeReportRole, parseReportSlice } from "@/lib/report-slice";
 
 const UNASSIGNED = "Unassigned";
+const NO_OFFICE_KEY = "__no_office__";
+const NO_OFFICE_NAME = "No office";
 const LOW_THRESHOLD = 3;
 const WATCH_THRESHOLD = 3.5;
 
@@ -94,6 +96,11 @@ export type SurveyResults = {
     averageScore: number | null;
   };
   teams: TeamSummary[];
+  /**
+   * Score breakdown by the team's current office. Empty when the report is
+   * already filtered to one office, or when every response has no office.
+   */
+  offices: TeamSummary[];
   questions: QuestionResults[];
   /** Null means every role, including responses that have no role snapshot. */
   role: string | null;
@@ -102,7 +109,9 @@ export type SurveyResults = {
   teamName: string | null;
   /** Null means every tenure band, including responses stored before tenure was snapshotted. */
   tenure: TenureBand | null;
-  /** How the active slice (role, team, tenure, or all of them) may be published. */
+  /** Null means every office, including teams with no office set. */
+  office: string | null;
+  /** How the active slice (office, role, team, tenure, or all of them) may be published. */
   roleVisibility: RoleSegmentVisibility;
 };
 
@@ -132,12 +141,14 @@ type ResponseAttribute = {
   teamId: string | null;
   role: string | null;
   tenureBand: TenureBand | null;
+  office: string | null;
 };
 
 type SliceFilter = {
   teamId: string | null;
   role: string | null;
   tenure: TenureBand | null;
+  office: string | null;
 };
 
 /**
@@ -154,7 +165,7 @@ async function publishPlanForSurvey(
   if (slice.unmatched) {
     return { visibility: "empty", plan: null };
   }
-  if (!slice.teamId && !slice.role && !slice.tenure) {
+  if (!slice.teamId && !slice.role && !slice.tenure && !slice.office) {
     return {
       visibility: "all",
       plan: planTeamPublish(
@@ -205,13 +216,15 @@ async function loadResponseAttributes(surveyId: string): Promise<ResponseAttribu
       teamId: responses.teamId,
       role: responses.role,
       tenureBand: responses.tenureBand,
+      office: teams.office,
     })
     .from(responses)
+    .leftJoin(teams, eq(responses.teamId, teams.id))
     .where(eq(responses.surveyId, surveyId));
 }
 
 function coarserFilters(slice: SliceFilter): SliceFilter[] {
-  const dims: Array<"team" | "role" | "tenure"> = [];
+  const dims: Array<"team" | "role" | "tenure" | "office"> = [];
   if (slice.teamId) {
     dims.push("team");
   }
@@ -221,10 +234,13 @@ function coarserFilters(slice: SliceFilter): SliceFilter[] {
   if (slice.tenure) {
     dims.push("tenure");
   }
+  if (slice.office) {
+    dims.push("office");
+  }
   const filters: SliceFilter[] = [];
   const full = (1 << dims.length) - 1;
   for (let mask = 0; mask < full; mask += 1) {
-    const filter: SliceFilter = { teamId: null, role: null, tenure: null };
+    const filter: SliceFilter = { teamId: null, role: null, tenure: null, office: null };
     dims.forEach((dim, index) => {
       if ((mask & (1 << index)) === 0) {
         return;
@@ -237,6 +253,9 @@ function coarserFilters(slice: SliceFilter): SliceFilter[] {
       }
       if (dim === "tenure") {
         filter.tenure = slice.tenure;
+      }
+      if (dim === "office") {
+        filter.office = slice.office;
       }
     });
     filters.push(filter);
@@ -254,6 +273,9 @@ function countMatching(rows: ResponseAttribute[], filter: SliceFilter): number {
       continue;
     }
     if (filter.tenure && row.tenureBand !== filter.tenure) {
+      continue;
+    }
+    if (filter.office && row.office !== filter.office) {
       continue;
     }
     total += 1;
@@ -277,6 +299,9 @@ function countOnTeam(
     if (filter.tenure && row.tenureBand !== filter.tenure) {
       continue;
     }
+    if (filter.office && row.office !== filter.office) {
+      continue;
+    }
     total += 1;
   }
   return total;
@@ -292,6 +317,11 @@ function surveyResponsesWhere(surveyId: string, slice: ReportSlice) {
   }
   if (slice.tenure) {
     filters.push(eq(responses.tenureBand, slice.tenure));
+  }
+  if (slice.office) {
+    filters.push(
+      sql`${responses.teamId} in (select ${teams.id} from ${teams} where ${teams.office} = ${slice.office})`,
+    );
   }
   return and(...filters);
 }
@@ -312,12 +342,108 @@ function sliceFromOptions(options?: {
   role?: string | null;
   teamId?: string | null;
   tenure?: string | null;
+  office?: string | null;
 }): ReportSlice {
   return parseReportSlice({
     teamId: options?.teamId,
     role: options?.role,
     tenure: options?.tenure,
+    office: options?.office,
   });
+}
+
+function officePublishKey(office: string | null | undefined): string {
+  return office ? office : NO_OFFICE_KEY;
+}
+
+function summariesFromPlan(
+  plan: TeamPublishPlan,
+  responseIds: Map<string, Set<string>>,
+  scaleValues: Map<string, number[]>,
+  identityByKey: Map<string, { teamId: string | null; teamName: string }>,
+): TeamSummary[] {
+  const summaries: TeamSummary[] = [];
+  for (const key of plan.namedKeys) {
+    const identity = identityByKey.get(key);
+    const avg = average(scaleValues.get(key) ?? []);
+    summaries.push({
+      teamId: identity?.teamId ?? (key === "unassigned" || key === NO_OFFICE_KEY ? null : key),
+      teamName:
+        identity?.teamName ?? (key === NO_OFFICE_KEY ? NO_OFFICE_NAME : UNASSIGNED),
+      responseCount: responseIds.get(key)?.size ?? 0,
+      averageScore: avg,
+      health: healthFor(avg),
+    });
+  }
+
+  summaries.sort((a, b) => {
+    if (a.averageScore === null && b.averageScore === null) {
+      return a.teamName.localeCompare(b.teamName);
+    }
+    if (a.averageScore === null) {
+      return 1;
+    }
+    if (b.averageScore === null) {
+      return -1;
+    }
+    return a.averageScore - b.averageScore;
+  });
+
+  if (plan.showSuppressedBucket) {
+    const foldedValues = plan.suppressedKeys.flatMap((key) => scaleValues.get(key) ?? []);
+    const foldedCount = plan.suppressedKeys.reduce(
+      (sum, key) => sum + (responseIds.get(key)?.size ?? 0),
+      0,
+    );
+    const avg = average(foldedValues);
+    summaries.push({
+      teamId: SUPPRESSED_TEAM_KEY,
+      teamName: SUPPRESSED_TEAM_NAME,
+      responseCount: foldedCount,
+      averageScore: avg,
+      health: healthFor(avg),
+    });
+  }
+
+  return summaries;
+}
+
+function officeSummaries(input: {
+  slice: ReportSlice;
+  responseMeta: Map<string, { office: string | null }>;
+  officeScaleValues: Map<string, number[]>;
+  floor: number;
+}): TeamSummary[] {
+  if (input.slice.office) {
+    return [];
+  }
+  const officeResponseIds = new Map<string, Set<string>>();
+  for (const [responseId, meta] of input.responseMeta) {
+    const key = officePublishKey(meta.office);
+    const set = officeResponseIds.get(key) ?? new Set<string>();
+    set.add(responseId);
+    officeResponseIds.set(key, set);
+  }
+  if (officeResponseIds.size === 0) {
+    return [];
+  }
+  if (officeResponseIds.size === 1 && officeResponseIds.has(NO_OFFICE_KEY)) {
+    return [];
+  }
+  const plan = planTeamPublish(
+    [...officeResponseIds.entries()].map(([key, ids]) => ({ key, count: ids.size })),
+    input.floor,
+  );
+  const identity = new Map<string, { teamId: string | null; teamName: string }>();
+  for (const key of [...plan.namedKeys, ...plan.suppressedKeys]) {
+    identity.set(
+      key,
+      key === NO_OFFICE_KEY
+        ? { teamId: null, teamName: NO_OFFICE_NAME }
+        : { teamId: null, teamName: key },
+    );
+  }
+  return summariesFromPlan(plan, officeResponseIds, input.officeScaleValues, identity);
 }
 
 function round1(value: number): number {
@@ -547,11 +673,13 @@ function redactedSurveyResults(
       averageScore: null,
     },
     teams: [],
+    offices: [],
     questions: surveyQuestions.map((question) => emptyQuestion(question)),
     role: slice.role,
     teamId: slice.teamId,
     teamName,
     tenure: slice.tenure,
+    office: slice.office,
     roleVisibility,
   };
 }
@@ -562,6 +690,7 @@ export async function getSurveyResults(
     role?: string | null;
     teamId?: string | null;
     tenure?: string | null;
+    office?: string | null;
     floor?: number;
     // The close webhook already committed status and must not run the scheduler again.
     skipSchedule?: boolean;
@@ -597,6 +726,7 @@ export async function getSurveyResults(
       responseId: responses.id,
       teamId: teams.id,
       teamName: teams.name,
+      office: teams.office,
       questionId: questions.id,
       questionType: questions.type,
       value: answers.value,
@@ -609,19 +739,21 @@ export async function getSurveyResults(
 
   const responseMeta = new Map<
     string,
-    { teamId: string | null; teamName: string }
+    { teamId: string | null; teamName: string; office: string | null }
   >();
   for (const row of rows) {
     if (!responseMeta.has(row.responseId)) {
       responseMeta.set(row.responseId, {
         teamId: row.teamId,
         teamName: row.teamName ?? UNASSIGNED,
+        office: row.office,
       });
     }
   }
 
   const teamResponseIds = new Map<string, Set<string>>();
   const teamScaleValues = new Map<string, number[]>();
+  const officeScaleValues = new Map<string, number[]>();
   const allScaleValues: number[] = [];
 
   for (const [responseId, meta] of responseMeta) {
@@ -691,6 +823,10 @@ export async function getSurveyResults(
         const teamScores = teamScaleValues.get(key) ?? [];
         teamScores.push(n);
         teamScaleValues.set(key, teamScores);
+        const officeKey = officePublishKey(row.office);
+        const officeScores = officeScaleValues.get(officeKey) ?? [];
+        officeScores.push(n);
+        officeScaleValues.set(officeKey, officeScores);
       }
 
       const byTeam = publishScaleTeams(byTeamValues, namedKeys, suppressedKeys, publishPlan.showSuppressedBucket);
@@ -784,50 +920,18 @@ export async function getSurveyResults(
     }
   }
 
-  const teamSummaries: TeamSummary[] = [];
-
-  for (const key of publishPlan.namedKeys) {
-    const identity = identityByKey.get(key);
-    const avg = average(teamScaleValues.get(key) ?? []);
-    teamSummaries.push({
-      teamId: identity?.teamId ?? (key === "unassigned" ? null : key),
-      teamName: identity?.teamName ?? UNASSIGNED,
-      responseCount: teamResponseIds.get(key)?.size ?? 0,
-      averageScore: avg,
-      health: healthFor(avg),
-    });
-  }
-
-  teamSummaries.sort((a, b) => {
-    if (a.averageScore === null && b.averageScore === null) {
-      return a.teamName.localeCompare(b.teamName);
-    }
-    if (a.averageScore === null) {
-      return 1;
-    }
-    if (b.averageScore === null) {
-      return -1;
-    }
-    return a.averageScore - b.averageScore;
+  const teamSummaries = summariesFromPlan(
+    publishPlan,
+    teamResponseIds,
+    teamScaleValues,
+    identityByKey,
+  );
+  const offices = officeSummaries({
+    slice,
+    responseMeta,
+    officeScaleValues,
+    floor,
   });
-
-  if (publishPlan.showSuppressedBucket) {
-    const foldedValues = publishPlan.suppressedKeys.flatMap(
-      (key) => teamScaleValues.get(key) ?? [],
-    );
-    const foldedCount = publishPlan.suppressedKeys.reduce(
-      (sum, key) => sum + (teamResponseIds.get(key)?.size ?? 0),
-      0,
-    );
-    const avg = average(foldedValues);
-    teamSummaries.push({
-      teamId: SUPPRESSED_TEAM_KEY,
-      teamName: SUPPRESSED_TEAM_NAME,
-      responseCount: foldedCount,
-      averageScore: avg,
-      health: healthFor(avg),
-    });
-  }
 
   return {
     survey: {
@@ -842,11 +946,13 @@ export async function getSurveyResults(
       averageScore: average(allScaleValues),
     },
     teams: teamSummaries,
+    offices,
     questions: questionResults,
     role: slice.role,
     teamId: slice.teamId,
     teamName,
     tenure: slice.tenure,
+    office: slice.office,
     roleVisibility: decision.visibility,
   };
 }
@@ -857,6 +963,7 @@ export async function getPublishedComments(
     role?: string | null;
     teamId?: string | null;
     tenure?: string | null;
+    office?: string | null;
     floor?: number;
   },
 ): Promise<WrittenComment[] | null> {

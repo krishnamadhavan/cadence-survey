@@ -162,6 +162,46 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
 
       <PulseCompletion participation={participation} error={participationError} />
 
+      {results.offices.length > 0 ? (
+        <section className="mt-12">
+          <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
+            By office
+          </h2>
+          <p className="mt-1 text-sm text-ink/55">
+            Sorted worst first. Low is under 3.0, watch is under 3.5. Offices
+            with fewer than {anonymityFloor} responses are hidden so one person
+            cannot be identified. An office is the location set on the team now.
+          </p>
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
+            <table className="w-full min-w-[28rem] text-left text-sm">
+              <thead className="border-b border-ink/10 text-ink/45">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Office</th>
+                  <th className="px-4 py-3 font-medium">Responses</th>
+                  <th className="px-4 py-3 font-medium">Avg score</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.offices.map((office) => (
+                  <tr
+                    key={office.teamId ?? office.teamName}
+                    className="border-t border-ink/5"
+                  >
+                    <td className="px-4 py-3 font-medium text-ink">{office.teamName}</td>
+                    <td className="px-4 py-3 text-ink/70">{office.responseCount}</td>
+                    <td className="px-4 py-3 text-ink">{formatScore(office.averageScore)}</td>
+                    <td className="px-4 py-3">
+                      <HealthBadge team={office} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
       <section className="mt-12">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
           By team
