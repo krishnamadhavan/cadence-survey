@@ -2,14 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSurveyResults, SUPPRESSED_TEAM_NAME } from "@/db/results";
 import type { QuestionResults, TeamHealth, TeamSummary } from "@/db/results";
-import { listPulseLinks } from "@/db/pulse-links";
+import { listPulseParticipation } from "@/db/pulse-links";
 import { getResultShareToken } from "@/db/result-shares";
 import { listSurveyQuestions } from "@/db/surveys";
 import type { SurveyStatus } from "@/db/schema";
 import { getAnonymityFloor } from "@/db/settings";
 import { formatSurveyStatus } from "@/lib/survey-status";
-import { CopyLinkButton } from "./copy-link-button";
+import { PulseCompletion } from "@/components/admin/pulse-completion";
 import { ExportButtons, ResponseExportLink } from "./export-buttons";
+import { Participation } from "./participation";
 import { SurveyDraftEditor } from "./survey-editor";
 import { SurveySchedule } from "./survey-schedule";
 import { ResponseImportForm } from "./response-import-form";
@@ -49,12 +50,12 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
   const anonymityFloor = await getAnonymityFloor();
   const draftQuestions =
     status === "draft" ? await listSurveyQuestions(results.survey.publicToken) : [];
-  let pulseLinks: Awaited<ReturnType<typeof listPulseLinks>> = null;
-  let linksError = false;
+  let participation: Awaited<ReturnType<typeof listPulseParticipation>> = null;
+  let participationError = false;
   try {
-    pulseLinks = await listPulseLinks(results.survey.publicToken);
+    participation = await listPulseParticipation(results.survey.publicToken);
   } catch {
-    linksError = true;
+    participationError = true;
   }
   const shareToken =
     status === "closed" ? await getResultShareToken(results.survey.publicToken) : null;
@@ -106,47 +107,12 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
         </div>
       </header>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
-          Personal links
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-ink/60">
-          Each person has one link for this pulse. Copy it before they answer.
-          After they answer, this page hides the link. They can still change
-          that answer from the link they already have, until the pulse closes.
-          A response is stored with their team, not their name.
-        </p>
-        {linksError ? (
-          <p className="mt-4 text-sm text-ink/70">Could not load personal links.</p>
-        ) : pulseLinks && !pulseLinks.issued ? (
-          <p className="mt-4 text-sm text-ink/60">
-            Links are created when this pulse opens.
-          </p>
-        ) : pulseLinks && pulseLinks.links.length === 0 ? (
-          <p className="mt-4 text-sm text-ink/60">
-            No one is on the roster yet. Add people on the employees page.
-          </p>
-        ) : (
-          <ul className="mt-4 flex max-h-96 flex-col gap-2 overflow-y-auto">
-            {pulseLinks?.links.map((link) => (
-              <li
-                key={link.email}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-white/70 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">{link.name}</p>
-                  <p className="truncate text-sm text-ink/50">{link.email}</p>
-                </div>
-                {link.token ? (
-                  <CopyLinkButton path={`/s/${results.survey.publicToken}/${link.token}`} />
-                ) : (
-                  <p className="text-sm text-ink/45">Answered</p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Participation
+        participation={participation}
+        error={participationError}
+        publicToken={results.survey.publicToken}
+        status={status}
+      />
 
       {status === "closed" ? (
         <ResultShare
@@ -193,6 +159,8 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           }
         />
       </section>
+
+      <PulseCompletion participation={participation} error={participationError} />
 
       <section className="mt-12">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">

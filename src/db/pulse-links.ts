@@ -7,9 +7,15 @@ import {
   pulseLinks,
   responses,
   surveys,
+  teams,
   type AnswerValue,
 } from "@/db/schema";
 import type { TenureBand } from "@/lib/employee-attributes";
+import {
+  groupParticipation,
+  type ParticipationRow,
+  type PulseParticipation,
+} from "@/lib/pulse-participation";
 
 type LinkDb = Pick<typeof db, "insert" | "select" | "update">;
 
@@ -122,6 +128,52 @@ export async function listPulseLinks(surveyToken: string): Promise<PulseLinkList
     .orderBy(asc(employees.name), asc(employees.email));
 
   return { issued: true, links };
+}
+
+export async function listPulseParticipation(
+  surveyToken: string,
+  options?: { issue?: boolean },
+): Promise<PulseParticipation | null> {
+  const [survey] = await db
+    .select({ id: surveys.id, status: surveys.status })
+    .from(surveys)
+    .where(eq(surveys.publicToken, surveyToken))
+    .limit(1);
+  if (!survey) {
+    return null;
+  }
+  if (survey.status === "draft") {
+    return { issued: false, responded: 0, total: 0, teams: [] };
+  }
+  // Reports only read links that already exist. Opening a pulse, and importing
+  // people, are what create the missing ones.
+  if (survey.status === "open" && options?.issue !== false) {
+    await ensurePulseLinks(survey.id);
+  }
+
+  const rows = await db
+    .select({
+      teamId: teams.id,
+      teamName: teams.name,
+      name: employees.name,
+      email: employees.email,
+      answered: sql<boolean>`${pulseLinks.redeemed} or ${pulseLinks.responseId} is not null`,
+      token: sql<string | null>`case when ${pulseLinks.redeemed} or ${pulseLinks.responseId} is not null then null else ${pulseLinks.token} end`,
+    })
+    .from(pulseLinks)
+    .innerJoin(employees, eq(employees.id, pulseLinks.employeeId))
+    .innerJoin(teams, eq(teams.id, employees.teamId))
+    .where(eq(pulseLinks.surveyId, survey.id));
+
+  const people: ParticipationRow[] = rows.map((row) => ({
+    teamId: row.teamId,
+    teamName: row.teamName,
+    name: row.name,
+    email: row.email,
+    answered: row.answered,
+    token: row.token,
+  }));
+  return { issued: true, ...groupParticipation(people) };
 }
 
 export type PulseLinkView = {
