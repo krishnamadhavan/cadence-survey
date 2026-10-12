@@ -1,6 +1,7 @@
 import { parseRole, parseTenureBand, type TenureBand } from "@/lib/employee-attributes";
 import { parseCsvRecords } from "@/lib/employee-csv";
 import { responseQuestionHeaders } from "@/lib/response-export";
+import { parseTeamOffice } from "@/lib/team-slug";
 
 export const RESPONSE_IMPORT_MAX_BYTES = 1024 * 1024;
 export const RESPONSE_IMPORT_MAX_ROWS = 5000;
@@ -25,6 +26,7 @@ export type ResponseImportRow = {
   team: string;
   role: string | null;
   tenureBand: TenureBand | null;
+  office: string | null;
   submittedAt: Date | null;
   answers: ResponseImportAnswer[];
 };
@@ -41,12 +43,14 @@ export type ParsedResponseImport =
 const TEAM_ALIASES = ["team", "team name", "department"];
 const ROLE_ALIASES = ["role", "job role", "job title"];
 const TENURE_ALIASES = ["tenure", "tenure band", "tenure_band"];
+const OFFICE_ALIASES = ["office"];
 const SUBMITTED_ALIASES = ["submitted", "submitted at"];
 
 const RESERVED = new Set([
   ...TEAM_ALIASES,
   ...ROLE_ALIASES,
   ...TENURE_ALIASES,
+  ...OFFICE_ALIASES,
   ...SUBMITTED_ALIASES,
 ]);
 
@@ -57,6 +61,7 @@ export function responseImportTemplate(
     "Team",
     "Role",
     "Tenure",
+    "Office",
     "Submitted",
     ...responseQuestionHeaders(questions),
   ];
@@ -90,6 +95,7 @@ export function parseResponseImport(
   const teamIndex = headerIndex(headers, TEAM_ALIASES);
   const roleIndex = headerIndex(headers, ROLE_ALIASES);
   const tenureIndex = headerIndex(headers, TENURE_ALIASES);
+  const officeIndex = headerIndex(headers, OFFICE_ALIASES);
   const submittedIndex = headerIndex(headers, SUBMITTED_ALIASES);
   if (teamIndex < 0) {
     return {
@@ -119,7 +125,7 @@ export function parseResponseImport(
   }
 
   const used = new Set(
-    [teamIndex, roleIndex, tenureIndex, submittedIndex, ...questionIndexes.map((column) => column.index)].filter(
+    [teamIndex, roleIndex, tenureIndex, officeIndex, submittedIndex, ...questionIndexes.map((column) => column.index)].filter(
       (index) => index >= 0,
     ),
   );
@@ -153,6 +159,7 @@ export function parseResponseImport(
       teamIndex,
       roleIndex,
       tenureIndex,
+      officeIndex,
       submittedIndex,
       questionIndexes,
     });
@@ -205,6 +212,7 @@ function parseRow(
     teamIndex: number;
     roleIndex: number;
     tenureIndex: number;
+    officeIndex: number;
     submittedIndex: number;
     questionIndexes: {
       question: ResponseImportQuestion;
@@ -244,6 +252,16 @@ function parseRow(
     }
   }
 
+  let office: string | null = null;
+  if (columns.officeIndex >= 0) {
+    const parsedOffice = parseTeamOffice(record[columns.officeIndex] ?? "");
+    if (!parsedOffice.ok) {
+      errors.push({ line, message: "Office must be 80 characters or fewer." });
+    } else {
+      office = parsedOffice.office;
+    }
+  }
+
   let submittedAt: Date | null = null;
   if (columns.submittedIndex >= 0) {
     const parsedDate = parseSubmitted(record[columns.submittedIndex] ?? "");
@@ -277,7 +295,7 @@ function parseRow(
     return { row: null, errors: [{ line, message: "This row has no answers." }] };
   }
   return {
-    row: { line, team, role, tenureBand, submittedAt, answers },
+    row: { line, team, role, tenureBand, office, submittedAt, answers },
     errors: [],
   };
 }

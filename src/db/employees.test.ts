@@ -57,13 +57,19 @@ test("importEmployeesFromCsv skips unknown teams and upserts by email", async (t
   );
   assert.equal(kept.updated, 1);
   const [keptRow] = await db
-    .select({ name: employees.name, role: employees.role, tenureBand: employees.tenureBand })
+    .select({
+      name: employees.name,
+      role: employees.role,
+      tenureBand: employees.tenureBand,
+      office: employees.office,
+    })
     .from(employees)
     .where(eq(employees.id, renamed.id))
     .limit(1);
   assert.equal(keptRow?.name, "Ada Kept");
   assert.equal(keptRow?.role, "Engineer");
   assert.equal(keptRow?.tenureBand, "lt_1");
+  assert.equal(keptRow?.office, null);
 
   const cleared = await importEmployeesFromCsv(
     `name,email,team,role,tenure\nAda Kept,${email},Engineering,,\n`,
@@ -90,13 +96,39 @@ test("importEmployeesFromCsv skips unknown teams and upserts by email", async (t
   assert.equal(unchanged?.name, "Ada Kept");
   assert.equal(unchanged?.role, null);
 
+  const placed = await importEmployeesFromCsv(
+    `name,email,team,office\nAda Office,${email},Engineering,  New   York  \n`,
+  );
+  assert.equal(placed.updated, 1);
+  assert.equal(placed.errors.length, 0);
+  const [placedRow] = await db
+    .select({ office: employees.office, role: employees.role })
+    .from(employees)
+    .where(eq(employees.id, renamed.id))
+    .limit(1);
+  assert.equal(placedRow?.office, "New York");
+  assert.equal(placedRow?.role, null);
+
+  const keptOffice = await importEmployeesFromCsv(
+    `name,email,team\nAda Office,${email},Engineering\n`,
+  );
+  assert.equal(keptOffice.updated, 1);
+  const [keptOfficeRow] = await db
+    .select({ office: employees.office })
+    .from(employees)
+    .where(eq(employees.id, renamed.id))
+    .limit(1);
+  assert.equal(keptOfficeRow?.office, "New York");
+
   const set = await updateEmployeeAttributes({
     employeeId: renamed.id,
     role: "  Product designer  ",
     tenureBand: "3yr+",
+    office: "  London  ",
   });
   assert.equal(set.role, "Product designer");
   assert.equal(set.tenureBand, "gte_3");
+  assert.equal(set.office, "London");
 
   await assert.rejects(
     () =>
@@ -104,16 +136,45 @@ test("importEmployeesFromCsv skips unknown teams and upserts by email", async (t
         employeeId: renamed.id,
         role: "x".repeat(81),
         tenureBand: "",
+        office: "Berlin",
       }),
     EmployeeAttributeError,
   );
   const [still] = await db
-    .select({ role: employees.role, tenureBand: employees.tenureBand })
+    .select({ role: employees.role, tenureBand: employees.tenureBand, office: employees.office })
     .from(employees)
     .where(eq(employees.id, renamed.id))
     .limit(1);
   assert.equal(still?.role, "Product designer");
   assert.equal(still?.tenureBand, "gte_3");
+  assert.equal(still?.office, "London");
+
+  await assert.rejects(
+    () =>
+      updateEmployeeAttributes({
+        employeeId: renamed.id,
+        role: "",
+        tenureBand: "",
+        office: "x".repeat(81),
+      }),
+    EmployeeAttributeError,
+  );
+  const [afterLongOffice] = await db
+    .select({ role: employees.role, office: employees.office })
+    .from(employees)
+    .where(eq(employees.id, renamed.id))
+    .limit(1);
+  assert.equal(afterLongOffice?.role, "Product designer");
+  assert.equal(afterLongOffice?.office, "London");
+
+  const clearedOffice = await updateEmployeeAttributes({
+    employeeId: renamed.id,
+    role: "",
+    tenureBand: "",
+    office: "   ",
+  });
+  assert.equal(clearedOffice.office, null);
+  assert.equal(clearedOffice.role, null);
 
   await assert.rejects(
     () =>
@@ -121,6 +182,7 @@ test("importEmployeesFromCsv skips unknown teams and upserts by email", async (t
         employeeId: "00000000-0000-4000-8000-000000000000",
         role: "",
         tenureBand: "",
+        office: "",
       }),
     EmployeeAttributeError,
   );

@@ -95,6 +95,7 @@ export async function updateEmployeeAttributesAction(
       employeeId: employeeId.data,
       role: String(formData.get("role") ?? ""),
       tenureBand: String(formData.get("tenureBand") ?? ""),
+      office: String(formData.get("office") ?? ""),
       actor: { id: actor.id, email: actor.email },
     });
     revalidatePath("/admin/employees");

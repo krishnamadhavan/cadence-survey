@@ -125,14 +125,14 @@ test("closed pulse exports one row per named team response", async (t) => {
   assert.equal(ready.publicToken, closedToken);
   const lines = ready.csv.replace(/^\uFEFF/, "").replace(/\r\n$/, "").split("\r\n");
   assert.equal(lines.length, floor + 3);
-  assert.equal(lines[0], `Team,Role,Tenure,How was the week?,'=notes,Pace`);
+  assert.equal(lines[0], `Team,Role,Tenure,Office,How was the week?,'=notes,Pace`);
   assert.equal(
     lines[1],
-    `${engineeringName},Engineer,<1yr,5,"shipped, today",Fast`,
+    `${engineeringName},Engineer,<1yr,,5,"shipped, today",Fast`,
   );
-  assert.equal(lines[2], `${engineeringName},Engineer,1-3yr,4,,`);
-  assert.equal(lines[3], `${engineeringName},Designer,3yr+,5,'=1+1,Slow`);
-  assert.equal(lines[4], `${engineeringName},,,3,,Fast`);
+  assert.equal(lines[2], `${engineeringName},Engineer,1-3yr,,4,,`);
+  assert.equal(lines[3], `${engineeringName},Designer,3yr+,,5,'=1+1,Slow`);
+  assert.equal(lines[4], `${engineeringName},,,,3,,Fast`);
   assert.equal(ready.csv.includes(designName), false);
   assert.equal(ready.csv.includes(operationsName), false);
   assert.equal(ready.csv.includes("folded-note"), false);
@@ -167,7 +167,7 @@ test("closed pulse exports one row per named team response", async (t) => {
   const unassigned = await exportClosedResponses(unassignedToken, { floor });
   assert.equal(unassigned.state, "ready");
   if (unassigned.state === "ready") {
-    assert.match(unassigned.csv, /Unassigned,,,4/);
+    assert.match(unassigned.csv, /Unassigned,,,,4/);
     for (const id of responseIds) {
       assert.equal(unassigned.csv.includes(id), false);
     }

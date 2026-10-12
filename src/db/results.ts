@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { getAnonymityFloor } from "@/db/settings";
 import { applyDueSurveySchedules } from "@/db/surveys";
@@ -97,8 +97,9 @@ export type SurveyResults = {
   };
   teams: TeamSummary[];
   /**
-   * Score breakdown by the team's current office. Empty when the report is
-   * already filtered to one office, or when every response has no office.
+   * Score breakdown by the office saved on the person at submit. Empty when
+   * the report is already filtered to one office, or when every response has
+   * no office.
    */
   offices: TeamSummary[];
   questions: QuestionResults[];
@@ -109,7 +110,7 @@ export type SurveyResults = {
   teamName: string | null;
   /** Null means every tenure band, including responses stored before tenure was snapshotted. */
   tenure: TenureBand | null;
-  /** Null means every office, including teams with no office set. */
+  /** Null means every office, including answers stored with no office. */
   office: string | null;
   /** How the active slice (office, role, team, tenure, or all of them) may be published. */
   roleVisibility: RoleSegmentVisibility;
@@ -216,10 +217,9 @@ async function loadResponseAttributes(surveyId: string): Promise<ResponseAttribu
       teamId: responses.teamId,
       role: responses.role,
       tenureBand: responses.tenureBand,
-      office: teams.office,
+      office: responses.office,
     })
     .from(responses)
-    .leftJoin(teams, eq(responses.teamId, teams.id))
     .where(eq(responses.surveyId, surveyId));
 }
 
@@ -319,9 +319,7 @@ function surveyResponsesWhere(surveyId: string, slice: ReportSlice) {
     filters.push(eq(responses.tenureBand, slice.tenure));
   }
   if (slice.office) {
-    filters.push(
-      sql`${responses.teamId} in (select ${teams.id} from ${teams} where ${teams.office} = ${slice.office})`,
-    );
+    filters.push(eq(responses.office, slice.office));
   }
   return and(...filters);
 }
@@ -726,7 +724,7 @@ export async function getSurveyResults(
       responseId: responses.id,
       teamId: teams.id,
       teamName: teams.name,
-      office: teams.office,
+      office: responses.office,
       questionId: questions.id,
       questionType: questions.type,
       value: answers.value,

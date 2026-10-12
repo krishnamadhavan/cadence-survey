@@ -111,7 +111,8 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
           <h1 className="font-serif text-4xl text-ink">Teams</h1>
           <p className="mt-2 text-ink/60">
             Create, rename, and retire teams used on the roster and pulses.
-            An office lets reports compare locations.
+            The office here is a label for the team. Reports compare the office
+            on each person.
           </p>
         </div>
         <button
@@ -527,7 +528,7 @@ function TeamForm({
             onChange={(event) => setOffice(event.target.value)}
           />
           <span className="text-xs text-ink/40">
-            Optional. Pulse reports group this team under this office. Leave blank to clear it.
+            Optional label for this team. Reports use the office on each person. Leave blank to clear it.
           </span>
         </label>
         {state?.error ? (

@@ -38,7 +38,13 @@ export class PulseLinkError extends Error {
 }
 
 export type ClaimedPulseLink =
-  | { mode: "create"; linkId: string; teamId: string; tenureBand: TenureBand | null }
+  | {
+      mode: "create";
+      linkId: string;
+      teamId: string;
+      tenureBand: TenureBand | null;
+      office: string | null;
+    }
   | {
       mode: "update";
       linkId: string;
@@ -252,8 +258,9 @@ function answerText(value: AnswerValue): string | null {
 }
 
 // Locks the pulse, then the link. A first submit uses the person's current
-// team and tenure band. A later submit keeps the team already stored on the
-// response. The employee id does not leave this function.
+// team, tenure band, and office. A later submit keeps the team, tenure, and
+// office already stored on the response. The employee id does not leave this
+// function.
 export async function takePulseLink(
   tx: LinkDb,
   surveyId: string,
@@ -316,7 +323,11 @@ export async function takePulseLink(
   }
 
   const [person] = await tx
-    .select({ teamId: employees.teamId, tenureBand: employees.tenureBand })
+    .select({
+      teamId: employees.teamId,
+      tenureBand: employees.tenureBand,
+      office: employees.office,
+    })
     .from(employees)
     .where(eq(employees.id, link.employeeId))
     .limit(1);
@@ -329,5 +340,6 @@ export async function takePulseLink(
     linkId: link.id,
     teamId: person.teamId,
     tenureBand: person.tenureBand,
+    office: person.office,
   };
 }

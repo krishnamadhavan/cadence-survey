@@ -40,9 +40,11 @@ export function ResponseImportForm({
         <>
           <p className="mt-2 text-sm text-ink/60">
             Each row is one past response for a team. Include a Team column and one
-            column per question, using the question text. Role and Tenure are optional
-            and are saved on that response, so this history can be filtered by role
-            and tenure like any other pulse. Tenure is &lt;1yr, 1-3yr, or 3yr+. Submitted
+            column per question, using the question text. Role, Tenure, and Office
+            are optional and are saved on that response, so this history can be
+            filtered by role, tenure, and office like any other pulse. Tenure is
+            &lt;1yr, 1-3yr, or 3yr+. Office is one location, up to 80 characters.
+            Submitted
             is optional, a date like 2024-05-02. The file is saved only when every row
             is valid. Importing again adds another copy of each row.
           </p>

@@ -165,6 +165,7 @@ export async function submitSurveyResponse(
           teamId: taken.teamId,
           role,
           tenureBand: taken.tenureBand,
+          office: taken.office,
         })
         .returning({ id: responses.id });
 

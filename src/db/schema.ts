@@ -121,7 +121,7 @@ export const teams = pgTable("teams", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
   slug: text("slug").notNull().unique(),
-  /** Current location for this team. Past responses follow it. Blank means no office. */
+  /** Optional label for this team. Reports use each person's office, not this. */
   office: text("office"),
 });
 
@@ -136,6 +136,8 @@ export const employees = pgTable(
       .references(() => teams.id, { onDelete: "restrict" }),
     role: text("role"),
     tenureBand: employeeTenureBand("tenure_band"),
+    /** Current office for this person. One value. Copied onto the answer at first submit. */
+    office: text("office"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -219,6 +221,8 @@ export const responses = pgTable(
     role: text("role"),
     // Snapshot of the roster tenure band at submit. A band value, not a link to the employee.
     tenureBand: employeeTenureBand("tenure_band"),
+    // Snapshot of the person's office at first submit. Later edits keep this value.
+    office: text("office"),
     submittedAt: timestamp("submitted_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -228,13 +232,15 @@ export const responses = pgTable(
     index("responses_team_id_idx").on(table.teamId),
     index("responses_survey_role_idx").on(table.surveyId, table.role),
     index("responses_survey_tenure_idx").on(table.surveyId, table.tenureBand),
+    index("responses_survey_office_idx").on(table.surveyId, table.office),
   ],
 );
 
 // One personal link per employee per pulse. `response_id` points at the single
 // response that link wrote, so a later visit can replace it while the pulse
-// is open. The response row stores the team and a tenure band snapshot, not
-// the employee. Reports and the admin link list do not read `response_id`.
+// is open. The response stores the team, tenure, and office from that first
+// submit, not the employee. Reports and the admin link list do not read
+// `response_id`.
 // There is no redeemed time.
 export const pulseLinks = pgTable(
   "pulse_links",

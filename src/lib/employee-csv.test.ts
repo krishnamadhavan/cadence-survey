@@ -20,6 +20,7 @@ test("parseEmployeeCsv keeps a UTF-8 BOM and reordered columns", () => {
   assert.equal(parsed.errors.length, 0);
   assert.equal(parsed.columns.role, false);
   assert.equal(parsed.columns.tenure, false);
+  assert.equal(parsed.columns.office, false);
   assert.deepEqual(parsed.rows, [
     {
       line: 2,
@@ -28,6 +29,7 @@ test("parseEmployeeCsv keeps a UTF-8 BOM and reordered columns", () => {
       team: "Engineering",
       role: null,
       tenureBand: null,
+      office: null,
     },
   ]);
 });
@@ -44,6 +46,7 @@ test("parseEmployeeCsv reads role and tenure and rejects an unknown band", () =>
   );
   assert.equal(parsed.columns.role, true);
   assert.equal(parsed.columns.tenure, true);
+  assert.equal(parsed.columns.office, false);
   assert.deepEqual(
     parsed.rows.map((row) => [row.email, row.role, row.tenureBand]),
     [
@@ -79,6 +82,27 @@ test("parseEmployeeCsv requires name email team columns", () => {
   const parsed = parseEmployeeCsv("foo,bar\n1,2\n");
   assert.equal(parsed.rows.length, 0);
   assert.match(parsed.errors[0]?.message ?? "", /Missing columns/);
+});
+
+test("parseEmployeeCsv trims one office and rejects an over-long one", () => {
+  const parsed = parseEmployeeCsv(
+    [
+      "name,email,team,office",
+      "Ada,ada@x.test,Engineering,  New   York  ",
+      `Bea,bea@x.test,Product,${"x".repeat(81)}`,
+      "Cam,cam@x.test,Design,",
+    ].join("\n"),
+  );
+  assert.equal(parsed.columns.office, true);
+  assert.deepEqual(
+    parsed.rows.map((row) => [row.email, row.office]),
+    [
+      ["ada@x.test", "New York"],
+      ["cam@x.test", null],
+    ],
+  );
+  assert.equal(parsed.errors.length, 1);
+  assert.match(parsed.errors[0]?.message ?? "", /Office must be 80/);
 });
 
 test("matchTeamId accepts name or slug", () => {

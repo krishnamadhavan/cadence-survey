@@ -176,6 +176,13 @@
       "when": 1791823197722,
       "tag": "0024_team_office",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791827435784,
+      "tag": "0025_employee_office",
+      "breakpoints": true
     }
   ]
 }

@@ -17,13 +17,14 @@ const oslo = `Oslo ${stamp}`;
 const engineer = `Engineer ${stamp}`;
 const designer = `Designer ${stamp}`;
 
-test("pulse results can be sliced by the office on each team", async (t) => {
+test("pulse results can be sliced by the office on each person", async (t) => {
   const tokens = [
     `off-show-${stamp}`,
     `off-gap-${stamp}`,
     `off-none-${stamp}`,
     `off-mix-${stamp}`,
     `off-hole-${stamp}`,
+    `off-split-${stamp}`,
   ];
   const teamIds: string[] = [];
   const employeeIds: string[] = [];
@@ -39,20 +40,21 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     await pg.end({ timeout: 2 });
   });
 
-  const showA = await insertTeam(`Off A ${stamp}`, london);
-  const showB = await insertTeam(`Off B ${stamp}`, london);
-  const showC = await insertTeam(`Off C ${stamp}`, berlin);
-  const showD = await insertTeam(`Off D ${stamp}`, madrid);
-  const gapA = await insertTeam(`Off Gap A ${stamp}`, london);
-  const gapB = await insertTeam(`Off Gap B ${stamp}`, london);
-  const gapC = await insertTeam(`Off Gap C ${stamp}`, berlin);
-  const none = await insertTeam(`Off None ${stamp}`, null);
-  const mixLondon = await insertTeam(`Off Mix L ${stamp}`, london);
-  const mixNone = await insertTeam(`Off Mix N ${stamp}`, null);
-  const holeE = await insertTeam(`Off Hole E ${stamp}`, london);
-  const holeF = await insertTeam(`Off Hole F ${stamp}`, london);
-  const holeG = await insertTeam(`Off Hole G ${stamp}`, berlin);
-  const holeH = await insertTeam(`Off Hole H ${stamp}`, madrid);
+  const showA = await insertTeam(`Off A ${stamp}`);
+  const showB = await insertTeam(`Off B ${stamp}`);
+  const showC = await insertTeam(`Off C ${stamp}`);
+  const showD = await insertTeam(`Off D ${stamp}`);
+  const gapA = await insertTeam(`Off Gap A ${stamp}`);
+  const gapB = await insertTeam(`Off Gap B ${stamp}`);
+  const gapC = await insertTeam(`Off Gap C ${stamp}`);
+  const none = await insertTeam(`Off None ${stamp}`);
+  const mixLondon = await insertTeam(`Off Mix L ${stamp}`);
+  const mixNone = await insertTeam(`Off Mix N ${stamp}`);
+  const holeE = await insertTeam(`Off Hole E ${stamp}`);
+  const holeF = await insertTeam(`Off Hole F ${stamp}`);
+  const holeG = await insertTeam(`Off Hole G ${stamp}`);
+  const holeH = await insertTeam(`Off Hole H ${stamp}`);
+  const split = await insertTeam(`Off Split ${stamp}`, `Paris ${stamp}`);
   teamIds.push(
     showA,
     showB,
@@ -68,12 +70,13 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     holeF,
     holeG,
     holeH,
+    split,
   );
 
   employeeIds.push(
-    ...(await insertPeople(showA, 2)),
-    ...(await insertPeople(showB, 1)),
-    ...(await insertPeople(showC, 1)),
+    ...(await insertPeople(showA, 2, london)),
+    ...(await insertPeople(showB, 1, london)),
+    ...(await insertPeople(showC, 1, berlin)),
   );
 
   const showId = await insertSurvey(tokens[0]);
@@ -83,6 +86,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: showId,
     teamId: showA,
     role: engineer,
+    office: london,
     count: 3,
     score: 5,
     scaleQuestionId: showScale,
@@ -92,6 +96,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: showId,
     teamId: showB,
     role: designer,
+    office: london,
     count: 3,
     score: 1,
     scaleQuestionId: showScale,
@@ -101,6 +106,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: showId,
     teamId: showC,
     role: engineer,
+    office: berlin,
     count: 3,
     score: 2,
     comment: "berlin-note",
@@ -111,6 +117,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: showId,
     teamId: showD,
     role: designer,
+    office: madrid,
     count: 3,
     score: 4,
     scaleQuestionId: showScale,
@@ -196,6 +203,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: gapId,
     teamId: gapA,
     role: engineer,
+    office: london,
     count: 3,
     score: 5,
     scaleQuestionId: gapScale,
@@ -205,6 +213,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: gapId,
     teamId: gapB,
     role: engineer,
+    office: london,
     count: 3,
     score: 4,
     scaleQuestionId: gapScale,
@@ -214,6 +223,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: gapId,
     teamId: gapC,
     role: engineer,
+    office: berlin,
     count: 2,
     score: 1,
     scaleQuestionId: gapScale,
@@ -248,6 +258,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: holeId,
     teamId: holeE,
     role: engineer,
+    office: london,
     count: 4,
     score: 5,
     scaleQuestionId: holeScale,
@@ -257,6 +268,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: holeId,
     teamId: holeF,
     role: designer,
+    office: london,
     count: 2,
     score: 1,
     scaleQuestionId: holeScale,
@@ -266,6 +278,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: holeId,
     teamId: holeG,
     role: engineer,
+    office: berlin,
     count: 4,
     score: 3,
     scaleQuestionId: holeScale,
@@ -275,6 +288,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: holeId,
     teamId: holeH,
     role: designer,
+    office: madrid,
     count: 4,
     score: 4,
     scaleQuestionId: holeScale,
@@ -295,6 +309,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: noneId,
     teamId: none,
     role: null,
+    office: null,
     count: 3,
     score: 4,
     scaleQuestionId: noneScale,
@@ -308,10 +323,10 @@ test("pulse results can be sliced by the office on each team", async (t) => {
   await db.update(teams).set({ office: oslo }).where(eq(teams.id, none));
   const moved = await getSurveyResults(tokens[2], { office: oslo, floor });
   assert.ok(moved);
-  assert.equal(moved.roleVisibility, "shown");
-  assert.equal(moved.survey.responseCount, 3);
+  assert.equal(moved.roleVisibility, "empty");
+  assert.equal(moved.survey.responseCount, 0);
   const movedAll = await getSurveyResults(tokens[2], { floor });
-  assert.equal(movedAll?.offices[0]?.teamName, oslo);
+  assert.deepEqual(movedAll?.offices, []);
 
   const mixId = await insertSurvey(tokens[3]);
   const mixScale = await insertQuestion(mixId, "scale", "Mix week?", 1);
@@ -319,6 +334,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: mixId,
     teamId: mixLondon,
     role: engineer,
+    office: london,
     count: 3,
     score: 4,
     scaleQuestionId: mixScale,
@@ -328,6 +344,7 @@ test("pulse results can be sliced by the office on each team", async (t) => {
     surveyId: mixId,
     teamId: mixNone,
     role: engineer,
+    office: null,
     count: 3,
     score: 2,
     scaleQuestionId: mixScale,
@@ -342,9 +359,56 @@ test("pulse results can be sliced by the office on each team", async (t) => {
       [london, 3],
     ],
   );
+  assert.equal(
+    mixed.offices.some((office) => office.teamName === `Paris ${stamp}`),
+    false,
+  );
+
+  const splitId = await insertSurvey(tokens[5]);
+  const splitScale = await insertQuestion(splitId, "scale", "Split week?", 1);
+  await addResponses({
+    surveyId: splitId,
+    teamId: split,
+    role: engineer,
+    office: london,
+    count: 3,
+    score: 5,
+    scaleQuestionId: splitScale,
+    textQuestionId: splitScale,
+  });
+  await addResponses({
+    surveyId: splitId,
+    teamId: split,
+    role: engineer,
+    office: berlin,
+    count: 3,
+    score: 1,
+    scaleQuestionId: splitScale,
+    textQuestionId: splitScale,
+  });
+  const splitAll = await getSurveyResults(tokens[5], { floor });
+  assert.ok(splitAll);
+  assert.deepEqual(
+    splitAll.offices.map((office) => [office.teamName, office.responseCount]),
+    [
+      [berlin, 3],
+      [london, 3],
+    ],
+  );
+  assert.equal(splitAll.teams.length, 1);
+  assert.equal(splitAll.teams[0]?.responseCount, 6);
+  assert.equal(
+    splitAll.offices.some((office) => office.teamName === `Paris ${stamp}`),
+    false,
+  );
+  const splitLondon = await getSurveyResults(tokens[5], { office: london, floor });
+  assert.ok(splitLondon);
+  assert.equal(splitLondon.roleVisibility, "shown");
+  assert.equal(splitLondon.survey.responseCount, 3);
+  assert.equal(splitLondon.teams[0]?.teamName, `Off Split ${stamp}`);
 });
 
-async function insertTeam(name: string, office: string | null) {
+async function insertTeam(name: string, office: string | null = null) {
   const [team] = await db
     .insert(teams)
     .values({
@@ -357,7 +421,7 @@ async function insertTeam(name: string, office: string | null) {
   return team.id;
 }
 
-async function insertPeople(teamId: string, count: number) {
+async function insertPeople(teamId: string, count: number, office: string | null) {
   const ids: string[] = [];
   for (let index = 0; index < count; index += 1) {
     const [person] = await db
@@ -366,6 +430,7 @@ async function insertPeople(teamId: string, count: number) {
         name: `Off ${index} ${teamId.slice(0, 8)}`,
         email: `${teamId}-${index}-${stamp}@office.test`,
         teamId,
+        office,
       })
       .returning({ id: employees.id });
     assert.ok(person);
@@ -408,6 +473,7 @@ async function addResponses(input: {
   surveyId: string;
   teamId: string;
   role: string | null;
+  office: string | null;
   count: number;
   score: number;
   comment?: string;
@@ -421,6 +487,7 @@ async function addResponses(input: {
         surveyId: input.surveyId,
         teamId: input.teamId,
         role: input.role,
+        office: input.office,
       })
       .returning({ id: responses.id });
     assert.ok(response);

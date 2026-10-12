@@ -170,7 +170,8 @@ export default async function SurveyResultsPage({ params }: ResultsPageProps) {
           <p className="mt-1 text-sm text-ink/55">
             Sorted worst first. Low is under 3.0, watch is under 3.5. Offices
             with fewer than {anonymityFloor} responses are hidden so one person
-            cannot be identified. An office is the location set on the team now.
+            cannot be identified. An office is the one saved on the person when
+            they submitted.
           </p>
           <div className="mt-4 overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
             <table className="w-full min-w-[28rem] text-left text-sm">

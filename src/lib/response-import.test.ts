@@ -44,6 +44,7 @@ test("parses a cadence response export and a history file", () => {
         teamName: "Engineering",
         role: "Engineer",
         tenure: "1-3yr",
+        office: "  London  ",
         values: [4, "Fast", "shipped, today"],
       },
     ],
@@ -57,6 +58,7 @@ test("parses a cadence response export and a history file", () => {
   assert.equal(parsed.rows[0]?.team, "Engineering");
   assert.equal(parsed.rows[0]?.role, "Engineer");
   assert.equal(parsed.rows[0]?.tenureBand, "y1_3");
+  assert.equal(parsed.rows[0]?.office, "London");
   assert.deepEqual(parsed.rows[0]?.answers, [
     { questionId: "scale", value: 4 },
     { questionId: "pace", value: "Fast" },
@@ -79,6 +81,7 @@ test("parses a cadence response export and a history file", () => {
   assert.equal(history.rows[0]?.answers.find((answer) => answer.questionId === "notes")?.value, "=1+1");
   assert.equal(history.rows[1]?.role, null);
   assert.equal(history.rows[1]?.tenureBand, null);
+  assert.equal(history.rows[1]?.office, null);
   assert.equal(
     history.rows[1]?.answers.some((answer) => answer.questionId === "notes"),
     false,
@@ -148,7 +151,7 @@ test("template names each question and keeps duplicate prompts apart", () => {
     { prompt: "Hello, team", position: 2 },
   ]);
   assert.ok(template.startsWith("\uFEFF"));
-  assert.match(template, /Team,Role,Tenure,Submitted,How was the week\?,"Hello, team"/);
+  assert.match(template, /Team,Role,Tenure,Office,Submitted,How was the week\?,"Hello, team"/);
 
   const moods: ResponseImportQuestion[] = [
     { id: "a", prompt: "Mood", position: 1, type: "scale", min: 1, max: 5 },

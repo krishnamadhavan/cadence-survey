@@ -56,12 +56,7 @@ export async function countEmployees(segment?: {
     filters.push(eq(employees.tenureBand, segment.tenure));
   }
   if (segment?.office) {
-    const [row] = await db
-      .select({ value: count() })
-      .from(employees)
-      .innerJoin(teams, eq(employees.teamId, teams.id))
-      .where(and(...filters, eq(teams.office, segment.office)));
-    return row?.value ?? 0;
+    filters.push(eq(employees.office, segment.office));
   }
   const [row] = await db
     .select({ value: count() })
@@ -70,13 +65,24 @@ export async function countEmployees(segment?: {
   return row?.value ?? 0;
 }
 
-export async function listTeamOffices(): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ office: teams.office })
-    .from(teams)
-    .where(isNotNull(teams.office))
-    .orderBy(asc(teams.office));
-  return rows.flatMap((row) => (row.office ? [row.office] : []));
+export async function listSegmentOffices(): Promise<string[]> {
+  const [roster, snapshots] = await Promise.all([
+    db
+      .selectDistinct({ office: employees.office })
+      .from(employees)
+      .where(isNotNull(employees.office)),
+    db
+      .selectDistinct({ office: responses.office })
+      .from(responses)
+      .where(isNotNull(responses.office)),
+  ]);
+  const offices = new Set<string>();
+  for (const row of [...roster, ...snapshots]) {
+    if (row.office) {
+      offices.add(row.office);
+    }
+  }
+  return [...offices].sort((a, b) => a.localeCompare(b));
 }
 
 export async function listSegmentRoles(): Promise<string[]> {
@@ -194,7 +200,7 @@ export async function getSurveyReportDetail(
       .select({ id: teams.id, name: teams.name })
       .from(teams)
       .orderBy(asc(teams.name)),
-    listTeamOffices(),
+    listSegmentOffices(),
   ]);
   const selected = surveyRows.find((survey) => survey.publicToken === token);
   if (!selected) {

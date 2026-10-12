@@ -191,7 +191,8 @@ export default async function ReportDetailPage({
             <>
               <ResponseExportLink token={selected.publicToken} />
               <p className="max-w-xs text-xs text-ink/45 sm:text-right">
-                One row per response, with the team, role, and tenure. A team
+                One row per response, with the team, role, tenure, and office.
+                A team
                 is included only when the report can name it. Smaller groups
                 are left out. This file is the whole pulse, not the filters
                 on this page.
@@ -237,6 +238,10 @@ export default async function ReportDetailPage({
               ? roleOnly
                 ? `${detail.role} across teams. Groups under ${anonymityFloor} responses stay hidden. A role that would leave a smaller group exposed stays in All roles.`
                 : `Groups under ${anonymityFloor} responses stay hidden. A slice that would leave a smaller group exposed stays in the wider report.${
+                    detail.office
+                      ? " Office is the one saved on the person when they submitted. Older answers with no office stay under All offices."
+                      : ""
+                  }${
                     detail.tenure
                       ? " Tenure is the roster band from when the person submitted. Older answers with no band stay under All tenure."
                       : ""
@@ -546,7 +551,8 @@ export default async function ReportDetailPage({
           <p className="mt-1 text-sm text-ink/55">
             Sorted worst first. Offices with fewer than {anonymityFloor}{" "}
             responses{label ? ` in ${label}` : ""} are hidden so one person
-            cannot be identified. An office is the location set on the team now.
+            cannot be identified. An office is the one saved on the person when
+            they submitted.
           </p>
           {namedOffices.length === 0 ? (
             <p className="mt-4 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">

@@ -33,9 +33,9 @@ test("response csv is one row per named team response", () => {
   assert.equal(rows.rows.length, floor);
   assert.equal(rows.rows.every((line) => line.teamName === "Engineering"), true);
   const csv = buildResponseCsv(questions, rows.rows);
-  assert.match(csv, /Team,Role,Tenure,How was the week\?,'=notes/);
-  assert.match(csv, /Engineering,Engineer,<1yr,5,shipped/);
-  assert.match(csv, /Engineering,'=lead,3yr\+,5,'=1\+1/);
+  assert.match(csv, /Team,Role,Tenure,Office,How was the week\?,'=notes/);
+  assert.match(csv, /Engineering,Engineer,<1yr,,5,shipped/);
+  assert.match(csv, /Engineering,'=lead,3yr\+,,5,'=1\+1/);
   assert.equal(csv.includes("Design"), false);
   assert.equal(csv.includes("Operations"), false);
   assert.equal(csv.includes("Folder"), false);
@@ -96,6 +96,7 @@ function row(
   values: ExportResponse["values"],
   role: string | null = null,
   tenure: string | null = null,
+  office: string | null = null,
 ): ExportResponse {
-  return { id, teamKey, teamName, submittedAt, role, tenure, values };
+  return { id, teamKey, teamName, submittedAt, role, tenure, office, values };
 }

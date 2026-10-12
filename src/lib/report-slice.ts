@@ -10,7 +10,7 @@ export type ReportSlice = {
   teamId: string | null;
   role: string | null;
   tenure: TenureBand | null;
-  /** Null means every office, including teams that have no office set. */
+  /** Null means every office, including answers stored with no office. */
   office: string | null;
   /** The query was present but could not name a real team or tenure band. */
   unmatched: boolean;
