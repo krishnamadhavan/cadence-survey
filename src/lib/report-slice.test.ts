@@ -7,6 +7,7 @@ test("blank filters mean the whole report", () => {
     teamId: null,
     role: null,
     tenure: null,
+    office: null,
     unmatched: false,
   });
 });
@@ -22,6 +23,7 @@ test("a role is trimmed and an unknown tenure or team matches nothing", () => {
       teamId: "abcdefff-1111-4222-8333-444444444444",
       role: "Engineer",
       tenure: "lt_1",
+      office: null,
       unmatched: false,
     },
   );
@@ -41,4 +43,14 @@ test("an over-long role is kept as a value that matches nothing", () => {
   const slice = parseReportSlice({ role: "x".repeat(81) });
   assert.equal(slice.unmatched, false);
   assert.equal(slice.role?.length, 81);
+  assert.equal(slice.office, null);
+});
+
+test("an office is trimmed and an over-long office matches nothing", () => {
+  assert.equal(parseReportSlice({ office: "  New   York  " }).office, "New York");
+  assert.equal(parseReportSlice({ office: "   " }).office, null);
+
+  const slice = parseReportSlice({ office: "x".repeat(81) });
+  assert.equal(slice.unmatched, false);
+  assert.equal(slice.office?.length, 81);
 });

@@ -33,14 +33,17 @@ export type SurveyReportDetail = {
   teamId: string | null;
   teamName: string | null;
   tenure: TenureBand | null;
+  office: string | null;
   teams: { id: string; name: string }[];
   roles: string[];
+  offices: string[];
 };
 
 export async function countEmployees(segment?: {
   teamId?: string | null;
   role?: string | null;
   tenure?: TenureBand | null;
+  office?: string | null;
 }) {
   const filters = [];
   if (segment?.teamId) {
@@ -52,11 +55,34 @@ export async function countEmployees(segment?: {
   if (segment?.tenure) {
     filters.push(eq(employees.tenureBand, segment.tenure));
   }
+  if (segment?.office) {
+    filters.push(eq(employees.office, segment.office));
+  }
   const [row] = await db
     .select({ value: count() })
     .from(employees)
     .where(filters.length > 0 ? and(...filters) : undefined);
   return row?.value ?? 0;
+}
+
+export async function listSegmentOffices(): Promise<string[]> {
+  const [roster, snapshots] = await Promise.all([
+    db
+      .selectDistinct({ office: employees.office })
+      .from(employees)
+      .where(isNotNull(employees.office)),
+    db
+      .selectDistinct({ office: responses.office })
+      .from(responses)
+      .where(isNotNull(responses.office)),
+  ]);
+  const offices = new Set<string>();
+  for (const row of [...roster, ...snapshots]) {
+    if (row.office) {
+      offices.add(row.office);
+    }
+  }
+  return [...offices].sort((a, b) => a.localeCompare(b));
 }
 
 export async function listSegmentRoles(): Promise<string[]> {
@@ -149,6 +175,7 @@ export async function getSurveyReportDetail(
         teamId?: string | null;
         role?: string | null;
         tenure?: string | null;
+        office?: string | null;
       }
     | null,
   floor?: number,
@@ -158,7 +185,7 @@ export async function getSurveyReportDetail(
       ? { role: segmentInput }
       : segmentInput;
   const slice = parseReportSlice(raw);
-  const [surveyRows, employeeCount, roles, teamRows] = await Promise.all([
+  const [surveyRows, employeeCount, roles, teamRows, offices] = await Promise.all([
     listReportSurveys(),
     slice.unmatched
       ? Promise.resolve(0)
@@ -166,12 +193,14 @@ export async function getSurveyReportDetail(
           teamId: slice.teamId,
           role: slice.role,
           tenure: slice.tenure,
+          office: slice.office,
         }),
     listSegmentRoles(),
     db
       .select({ id: teams.id, name: teams.name })
       .from(teams)
       .orderBy(asc(teams.name)),
+    listSegmentOffices(),
   ]);
   const selected = surveyRows.find((survey) => survey.publicToken === token);
   if (!selected) {
@@ -182,6 +211,7 @@ export async function getSurveyReportDetail(
     teamId: raw.teamId,
     role: raw.role,
     tenure: raw.tenure,
+    office: raw.office,
     floor,
   };
   const { cycles, previous } = pickPreviousCycle(surveyRows, selected.publicToken);
@@ -196,7 +226,7 @@ export async function getSurveyReportDetail(
   }
 
   const segmented = Boolean(
-    slice.teamId || slice.role || slice.tenure || slice.unmatched,
+    slice.teamId || slice.role || slice.tenure || slice.office || slice.unmatched,
   );
   const cycleRows = segmented
     ? await Promise.all(
@@ -224,8 +254,10 @@ export async function getSurveyReportDetail(
     teamId: results.teamId,
     teamName: results.teamName,
     tenure: results.tenure,
+    office: results.office,
     teams: teamRows,
     roles,
+    offices,
   };
 }
 

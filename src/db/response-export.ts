@@ -66,6 +66,7 @@ export async function exportClosedResponses(
         teamName: teams.name,
         role: responses.role,
         tenureBand: responses.tenureBand,
+        office: responses.office,
         questionId: answers.questionId,
         value: answers.value,
       })
@@ -86,6 +87,7 @@ export async function exportClosedResponses(
           teamName: row.teamName ?? UNASSIGNED,
           role: row.role,
           tenure: tenureBandLabel(row.tenureBand),
+          office: row.office,
           values: [],
           cells: new Map(),
         };
@@ -108,6 +110,7 @@ export async function exportClosedResponses(
       teamName: response.teamName,
       role: response.role,
       tenure: response.tenure,
+      office: response.office,
       values: surveyQuestions.map((question) => response.cells.get(question.id) ?? null),
     }));
     const selected = selectResponseRows(loaded, floor);

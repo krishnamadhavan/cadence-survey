@@ -75,7 +75,7 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
 
   await db
     .update(employees)
-    .set({ teamId: beta, role: "Engineer", tenureBand: "gte_3" })
+    .set({ teamId: beta, role: "Engineer", tenureBand: "gte_3", office: "London" })
     .where(eq(employees.id, ada.id));
 
   const phrase = `private-note-${stamp}`;
@@ -99,6 +99,7 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
   assert.equal(response.teamId, beta);
   assert.equal(response.role, "Engineer");
   assert.equal(response.tenureBand, "gte_3");
+  assert.equal(response.office, "London");
   assert.equal(Object.hasOwn(response, "employeeId"), false);
 
   const [spent] = await db.select().from(pulseLinks).where(eq(pulseLinks.token, adaLink.token));
@@ -130,7 +131,7 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
 
   await db
     .update(employees)
-    .set({ teamId: alpha, role: "Designer", tenureBand: "lt_1" })
+    .set({ teamId: alpha, role: "Designer", tenureBand: "lt_1", office: "Oslo" })
     .where(eq(employees.id, ada.id));
 
   const kept = await submitSurveyResponse(
@@ -146,12 +147,18 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
   }
   assert.equal(kept.responseId, first.responseId);
   const [keptRow] = await db
-    .select({ teamId: responses.teamId, role: responses.role, tenureBand: responses.tenureBand })
+    .select({
+      teamId: responses.teamId,
+      role: responses.role,
+      tenureBand: responses.tenureBand,
+      office: responses.office,
+    })
     .from(responses)
     .where(eq(responses.id, first.responseId));
   assert.equal(keptRow?.teamId, beta);
   assert.equal(keptRow?.role, "Engineer");
   assert.equal(keptRow?.tenureBand, "gte_3");
+  assert.equal(keptRow?.office, "London");
 
   const rejected = await submitSurveyResponse(
     token,
@@ -185,12 +192,18 @@ test("a personal link replaces one anonymous answer until the pulse closes", asy
   }
   assert.equal(second.responseId, first.responseId);
   const [replaced] = await db
-    .select({ teamId: responses.teamId, role: responses.role, tenureBand: responses.tenureBand })
+    .select({
+      teamId: responses.teamId,
+      role: responses.role,
+      tenureBand: responses.tenureBand,
+      office: responses.office,
+    })
     .from(responses)
     .where(eq(responses.id, first.responseId));
   assert.equal(replaced?.teamId, beta);
   assert.equal(replaced?.role, null);
   assert.equal(replaced?.tenureBand, "gte_3");
+  assert.equal(replaced?.office, "London");
   const stored = await db
     .select({ value: answers.value })
     .from(answers)

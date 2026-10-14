@@ -1,5 +1,6 @@
 import { parseRole, parseTenureBand, type TenureBand } from "@/lib/employee-attributes";
 import { normalizeEmail } from "@/lib/email";
+import { parseTeamOffice } from "@/lib/team-slug";
 
 export type EmployeeCsvRow = {
   line: number;
@@ -8,11 +9,13 @@ export type EmployeeCsvRow = {
   team: string;
   role: string | null;
   tenureBand: TenureBand | null;
+  office: string | null;
 };
 
 export type EmployeeCsvColumns = {
   role: boolean;
   tenure: boolean;
+  office: boolean;
 };
 
 export type EmployeeCsvError = {
@@ -91,7 +94,7 @@ function headerIndex(headers: string[], aliases: string[]): number {
 
 export function parseEmployeeCsv(text: string): ParsedEmployeeCsv {
   const records = parseCsvRecords(text);
-  const noColumns = { role: false, tenure: false };
+  const noColumns = { role: false, tenure: false, office: false };
   if (records.length === 0) {
     return { rows: [], errors: [{ line: 1, message: "The file is empty." }], columns: noColumns };
   }
@@ -102,7 +105,12 @@ export function parseEmployeeCsv(text: string): ParsedEmployeeCsv {
   const teamIndex = headerIndex(headers, ["team", "team name", "department"]);
   const roleIndex = headerIndex(headers, ["role", "job role", "job title"]);
   const tenureIndex = headerIndex(headers, ["tenure", "tenure band", "tenure_band"]);
-  const columns = { role: roleIndex >= 0, tenure: tenureIndex >= 0 };
+  const officeIndex = headerIndex(headers, ["office"]);
+  const columns = {
+    role: roleIndex >= 0,
+    tenure: tenureIndex >= 0,
+    office: officeIndex >= 0,
+  };
 
   const missing: string[] = [];
   if (nameIndex < 0) missing.push("name");
@@ -174,8 +182,18 @@ export function parseEmployeeCsv(text: string): ParsedEmployeeCsv {
       tenureBand = parsedTenure;
     }
 
+    let office: string | null = null;
+    if (officeIndex >= 0) {
+      const parsedOffice = parseTeamOffice(record[officeIndex] ?? "");
+      if (!parsedOffice.ok) {
+        errors.push({ line, message: "Office must be 80 characters or fewer." });
+        continue;
+      }
+      office = parsedOffice.office;
+    }
+
     seen.add(email);
-    rows.push({ line, name, email, team, role, tenureBand });
+    rows.push({ line, name, email, team, role, tenureBand, office });
   }
 
   if (rows.length === 0 && errors.length === 0) {

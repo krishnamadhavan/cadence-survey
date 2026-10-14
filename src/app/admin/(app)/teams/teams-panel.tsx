@@ -71,7 +71,8 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
       }
       return (
         team.name.toLowerCase().includes(needle) ||
-        team.slug.toLowerCase().includes(needle)
+        team.slug.toLowerCase().includes(needle) ||
+        (team.office ?? "").toLowerCase().includes(needle)
       );
     });
   }, [teams, query, roster]);
@@ -110,6 +111,8 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
           <h1 className="font-serif text-4xl text-ink">Teams</h1>
           <p className="mt-2 text-ink/60">
             Create, rename, and retire teams used on the roster and pulses.
+            The office here is a label for the team. Reports compare the office
+            on each person.
           </p>
         </div>
         <button
@@ -193,10 +196,11 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
         ) : (
           <>
             <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
-              <table className="w-full min-w-[36rem] text-left text-sm">
+              <table className="w-full min-w-[42rem] text-left text-sm">
                 <thead className="border-b border-ink/10 text-ink/45">
                   <tr>
                     <th className="px-4 py-3 font-medium">Name</th>
+                    <th className="px-4 py-3 font-medium">Office</th>
                     <th className="px-4 py-3 font-medium">Slug</th>
                     <th className="px-4 py-3 font-medium">People</th>
                     <th className="px-4 py-3 font-medium">Responses</th>
@@ -212,6 +216,9 @@ export function TeamsPanel({ teams, dbError }: TeamsPanelProps) {
                       <tr key={team.id} className="border-t border-ink/5">
                         <td className="px-4 py-3 font-medium text-ink">
                           {team.name}
+                        </td>
+                        <td className="px-4 py-3 text-ink/70">
+                          {team.office ?? "—"}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-ink/60">
                           {team.slug}
@@ -448,6 +455,7 @@ function TeamForm({
   );
   const [name, setName] = useState(team?.name ?? "");
   const [slug, setSlug] = useState(team?.slug ?? "");
+  const [office, setOffice] = useState(team?.office ?? "");
   const [slugTouched, setSlugTouched] = useState(Boolean(team));
 
   if (state?.ok) {
@@ -507,6 +515,20 @@ function TeamForm({
           />
           <span className="text-xs text-ink/40">
             Used in imports and public survey team matching.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="text-ink/60">Office</span>
+          <input
+            name="office"
+            value={office}
+            maxLength={80}
+            autoComplete="off"
+            className="h-10 rounded-xl border border-ink/10 bg-white/70 px-3 text-sm text-ink outline-none focus:border-ink/30"
+            onChange={(event) => setOffice(event.target.value)}
+          />
+          <span className="text-xs text-ink/40">
+            Optional label for this team. Reports use the office on each person. Leave blank to clear it.
           </span>
         </label>
         {state?.error ? (

@@ -7,18 +7,22 @@ type ReportFiltersProps = {
   token: string;
   teams: { id: string; name: string }[];
   roles: string[];
+  offices: string[];
   teamId: string;
   role: string;
   tenure: string;
+  office: string;
 };
 
 export function ReportFilters({
   token,
   teams,
   roles,
+  offices,
   teamId,
   role,
   tenure,
+  office,
 }: ReportFiltersProps) {
   const router = useRouter();
   const roleOptions =
@@ -34,9 +38,16 @@ export function ReportFilters({
     : tenure
       ? [...TENURE_BANDS, { value: tenure, label: tenure }]
       : TENURE_BANDS;
+  const officeOptions =
+    office && !offices.includes(office)
+      ? [...offices, office].sort((a, b) => a.localeCompare(b))
+      : offices;
 
-  function push(next: { team: string; role: string; tenure: string }) {
+  function push(next: { team: string; role: string; tenure: string; office: string }) {
     const params = new URLSearchParams();
+    if (next.office) {
+      params.set("office", next.office);
+    }
     if (next.team) {
       params.set("team", next.team);
     }
@@ -54,11 +65,26 @@ export function ReportFilters({
   return (
     <>
       <select
+        aria-label="Office segment"
+        className="h-10 rounded-full border border-ink/15 bg-white px-4 text-sm text-ink"
+        value={office}
+        onChange={(event) => {
+          push({ office: event.target.value, team: teamId, role, tenure });
+        }}
+      >
+        <option value="">All offices</option>
+        {officeOptions.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+      <select
         aria-label="Team segment"
         className="h-10 rounded-full border border-ink/15 bg-white px-4 text-sm text-ink"
         value={teamId}
         onChange={(event) => {
-          push({ team: event.target.value, role, tenure });
+          push({ office, team: event.target.value, role, tenure });
         }}
       >
         <option value="">All teams</option>
@@ -73,7 +99,7 @@ export function ReportFilters({
         className="h-10 rounded-full border border-ink/15 bg-white px-4 text-sm text-ink"
         value={role}
         onChange={(event) => {
-          push({ team: teamId, role: event.target.value, tenure });
+          push({ office, team: teamId, role: event.target.value, tenure });
         }}
       >
         <option value="">All roles</option>
@@ -88,7 +114,7 @@ export function ReportFilters({
         className="h-10 rounded-full border border-ink/15 bg-white px-4 text-sm text-ink"
         value={tenure}
         onChange={(event) => {
-          push({ team: teamId, role, tenure: event.target.value });
+          push({ office, team: teamId, role, tenure: event.target.value });
         }}
       >
         <option value="">All tenure</option>

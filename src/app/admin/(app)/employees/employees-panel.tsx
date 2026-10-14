@@ -55,6 +55,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
   const [teamId, setTeamId] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
   const [tenureFilter, setTenureFilter] = useState("all");
+  const [officeFilter, setOfficeFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [pageSizeDraft, setPageSizeDraft] = useState(String(DEFAULT_PAGE_SIZE));
@@ -85,6 +86,16 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
     return [...found].sort((a, b) => a.localeCompare(b));
   }, [people]);
 
+  const offices = useMemo(() => {
+    const found = new Set<string>();
+    for (const person of people) {
+      if (person.office) {
+        found.add(person.office);
+      }
+    }
+    return [...found].sort((a, b) => a.localeCompare(b));
+  }, [people]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return people.filter((person) => {
@@ -107,6 +118,16 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
       ) {
         return false;
       }
+      if (officeFilter === "none" && person.office) {
+        return false;
+      }
+      if (
+        officeFilter !== "all" &&
+        officeFilter !== "none" &&
+        person.office !== officeFilter
+      ) {
+        return false;
+      }
       if (!needle) {
         return true;
       }
@@ -114,13 +135,18 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
         person.name.toLowerCase().includes(needle) ||
         person.email.toLowerCase().includes(needle) ||
         (person.role ?? "").toLowerCase().includes(needle) ||
+        (person.office ?? "").toLowerCase().includes(needle) ||
         tenureBandLabel(person.tenureBand).toLowerCase().includes(needle)
       );
     });
-  }, [people, query, roleFilter, teamId, tenureFilter]);
+  }, [officeFilter, people, query, roleFilter, teamId, tenureFilter]);
 
   const filtersActive =
-    query.trim() !== "" || teamId !== "all" || roleFilter !== "all" || tenureFilter !== "all";
+    query.trim() !== "" ||
+    teamId !== "all" ||
+    roleFilter !== "all" ||
+    tenureFilter !== "all" ||
+    officeFilter !== "all";
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize;
@@ -152,8 +178,9 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
         <div className="min-w-0">
           <h1 className="font-serif text-4xl text-ink">Employees</h1>
           <p className="mt-2 text-ink/60">
-            Search the roster, group people by team, role, or tenure, import a
-            CSV, move several people to another team, or remove someone who has left.
+            Search the roster, group people by team, office, role, or tenure,
+            import a CSV, move several people to another team, or remove someone
+            who has left.
           </p>
         </div>
         <button
@@ -181,7 +208,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                 setQuery(event.target.value);
                 resetToFirstPage();
               }}
-              placeholder="Search name, email, or role"
+              placeholder="Search name, email, role, or office"
               className="h-10 w-full rounded-full border border-ink/10 bg-white/70 pr-3 pl-9 text-sm text-ink outline-none placeholder:text-ink/35 focus:border-ink/30"
             />
           </label>
@@ -199,6 +226,28 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
               {teams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-ink/40">
+              <ChevronIcon />
+            </span>
+          </label>
+          <label className="relative shrink-0">
+            <span className="sr-only">Filter by office</span>
+            <select
+              value={officeFilter}
+              onChange={(event) => {
+                setOfficeFilter(event.target.value);
+                resetToFirstPage();
+              }}
+              className="h-10 appearance-none rounded-full border border-ink/10 bg-white/70 py-0 pr-9 pl-4 text-sm text-ink outline-none focus:border-ink/30"
+            >
+              <option value="all">All offices</option>
+              <option value="none">No office</option>
+              {offices.map((office) => (
+                <option key={office} value={office}>
+                  {office}
                 </option>
               ))}
             </select>
@@ -259,6 +308,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                 setTeamId("all");
                 setRoleFilter("all");
                 setTenureFilter("all");
+                setOfficeFilter("all");
                 resetToFirstPage();
               }}
             >
@@ -302,7 +352,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
         ) : (
           <>
             <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
-              <table className="w-full min-w-[52rem] text-left text-sm">
+              <table className="w-full min-w-[64rem] text-left text-sm">
                 <thead className="border-b border-ink/10 text-ink/45">
                   <tr>
                     <th className="w-10 px-4 py-3">
@@ -326,6 +376,7 @@ export function EmployeesPanel({ people, teams, dbError }: EmployeesPanelProps) 
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">Team</th>
+                    <th className="px-4 py-3 font-medium">Office</th>
                     <th className="px-4 py-3 font-medium">Role</th>
                     <th className="px-4 py-3 font-medium">Tenure</th>
                     <th className="px-4 py-3 font-medium">
@@ -477,6 +528,17 @@ function AttributeCells({ person }: { person: EmployeeListItem }) {
 
   return (
     <>
+      <td className="px-4 py-3">
+        <input
+          form={formId}
+          name="office"
+          defaultValue={person.office ?? ""}
+          maxLength={80}
+          placeholder="Office"
+          aria-label={`Office for ${person.name}`}
+          className="h-9 w-36 rounded-full border border-ink/10 bg-white px-3 text-sm text-ink outline-none placeholder:text-ink/35 focus:border-ink/30"
+        />
+      </td>
       <td className="px-4 py-3">
         <input
           form={formId}
@@ -704,13 +766,14 @@ function ImportModal({
               CSV columns: <code className="font-mono text-xs">name</code>,{" "}
               <code className="font-mono text-xs">email</code>,{" "}
               <code className="font-mono text-xs">team</code>. Optional{" "}
-              <code className="font-mono text-xs">role</code> and{" "}
+              <code className="font-mono text-xs">role</code>,{" "}
               <code className="font-mono text-xs">tenure</code> (
               <code className="font-mono text-xs">&lt;1yr</code>,{" "}
               <code className="font-mono text-xs">1-3yr</code>,{" "}
               <code className="font-mono text-xs">3yr+</code>
-              ). Leave those columns out to keep current values. Team must match
-              one of:{" "}
+              ), and <code className="font-mono text-xs">office</code>. Leave
+              those columns out to keep current values. A blank office clears it.
+              Team must match one of:{" "}
               {teams.length > 0
                 ? teams.map((team) => team.name).join(", ")
                 : "seed teams first"}

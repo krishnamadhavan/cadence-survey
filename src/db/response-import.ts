@@ -80,6 +80,7 @@ export async function importSurveyResponses(input: {
       teamId: string | null;
       role: string | null;
       tenureBand: (typeof parsed.rows)[number]["tenureBand"];
+      office: string | null;
       submittedAt: Date | null;
       answers: (typeof parsed.rows)[number]["answers"];
     }[] = [];
@@ -108,6 +109,7 @@ export async function importSurveyResponses(input: {
           teamId: row.teamId,
           role: row.role,
           tenureBand: row.tenureBand,
+          office: row.office,
           submittedAt: row.submittedAt ?? importedAt,
         })
         .returning({ id: responses.id });

@@ -4,7 +4,7 @@ import { requireWorkspaceWriterApi } from "@/lib/admin";
 export const dynamic = "force-dynamic";
 
 const TEMPLATE =
-  "name,email,team,role,tenure\nAda Lovelace,ada@example.com,Engineering,Engineer,<1yr\n";
+  "name,email,team,role,tenure,office\nAda Lovelace,ada@example.com,Engineering,Engineer,<1yr,London\n";
 
 export async function GET(request: Request) {
   const denied = await requireWorkspaceWriterApi(request);

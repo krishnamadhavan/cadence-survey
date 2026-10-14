@@ -10,6 +10,7 @@ export type ExportResponse = {
   teamName: string;
   role: string | null;
   tenure: string | null;
+  office: string | null;
   values: ExportCell[];
 };
 
@@ -19,6 +20,7 @@ export type ResponseExportPlan = {
     teamName: string;
     role: string | null;
     tenure: string | null;
+    office: string | null;
     values: ExportCell[];
   }[];
 };
@@ -64,6 +66,7 @@ function rowsForNamedTeams(responses: ExportResponse[], plan: TeamPublishPlan) {
       teamName: response.teamName,
       role: response.role,
       tenure: response.tenure,
+      office: response.office,
       values: response.values,
     }));
 }
@@ -88,12 +91,15 @@ export function buildResponseCsv(
     teamName: string;
     role: string | null;
     tenure: string | null;
+    office: string | null;
     values: ExportCell[];
   }[],
 ): string {
   const lines = [
-    csvLine(["Team", "Role", "Tenure", ...responseQuestionHeaders(questions)]),
-    ...rows.map((row) => csvLine([row.teamName, row.role, row.tenure, ...row.values])),
+    csvLine(["Team", "Role", "Tenure", "Office", ...responseQuestionHeaders(questions)]),
+    ...rows.map((row) =>
+      csvLine([row.teamName, row.role, row.tenure, row.office, ...row.values]),
+    ),
   ];
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }

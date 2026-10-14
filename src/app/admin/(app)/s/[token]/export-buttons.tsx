@@ -3,11 +3,15 @@ type ExportButtonsProps = {
   role?: string | null;
   teamId?: string | null;
   tenure?: string | null;
+  office?: string | null;
 };
 
-export function ExportButtons({ token, role, teamId, tenure }: ExportButtonsProps) {
+export function ExportButtons({ token, role, teamId, tenure, office }: ExportButtonsProps) {
   const base = `/api/admin/surveys/${token}/export`;
   const params = new URLSearchParams();
+  if (office) {
+    params.set("office", office);
+  }
   if (teamId) {
     params.set("team", teamId);
   }

@@ -56,12 +56,12 @@ test("imports one response per row onto a draft or closed pulse", async (t) => {
   await insertQuestion(closedId, "choice", "Pace", 2, { choices: ["Fast", "Slow"] });
   await insertQuestion(closedId, "text", "Notes", 3, null);
 
-  const header = "Team,Role,Tenure,Submitted,How was the week?,Pace,Notes";
+  const header = "Team,Role,Tenure,Office,Submitted,How was the week?,Pace,Notes";
   const good = [
     header,
-    `History Eng ${stamp},Engineer,1-3yr,2024-05-02,4,Fast,"shipped, today"`,
-    `history-eng-${stamp},Designer,<1yr,2024-05-03T15:04:05Z,5,Slow,=1+1`,
-    "Unassigned,,,2024-01-15,3,,",
+    `History Eng ${stamp},Engineer,1-3yr,  London  ,2024-05-02,4,Fast,"shipped, today"`,
+    `history-eng-${stamp},Designer,<1yr,,2024-05-03T15:04:05Z,5,Slow,=1+1`,
+    "Unassigned,,,,2024-01-15,3,,",
   ].join("\n");
 
   const mixed = [
@@ -94,6 +94,7 @@ test("imports one response per row onto a draft or closed pulse", async (t) => {
       teamId: responses.teamId,
       role: responses.role,
       tenureBand: responses.tenureBand,
+      office: responses.office,
       submittedAt: responses.submittedAt,
       question: questions.prompt,
       value: answers.value,
@@ -106,6 +107,7 @@ test("imports one response per row onto a draft or closed pulse", async (t) => {
 
   const engineering = stored.filter((row) => row.teamId === team.id && row.role === "Engineer");
   assert.equal(engineering[0]?.tenureBand, "y1_3");
+  assert.equal(engineering[0]?.office, "London");
   assert.equal(engineering[0]?.submittedAt.toISOString(), "2024-05-02T00:00:00.000Z");
   assert.deepEqual(
     engineering.map((row) => [row.question, row.value?.value]),
@@ -117,10 +119,12 @@ test("imports one response per row onto a draft or closed pulse", async (t) => {
   );
   const designer = stored.filter((row) => row.role === "Designer");
   assert.equal(designer[0]?.tenureBand, "lt_1");
+  assert.equal(designer[0]?.office, null);
   assert.equal(designer.find((row) => row.question === "Notes")?.value?.value, "=1+1");
   const unassigned = stored.filter((row) => row.teamId === null);
   assert.equal(unassigned.length, 1);
   assert.equal(unassigned[0]?.role, null);
+  assert.equal(unassigned[0]?.office, null);
   assert.equal(unassigned[0]?.question, "How was the week?");
 
   const unknown = await importSurveyResponses({

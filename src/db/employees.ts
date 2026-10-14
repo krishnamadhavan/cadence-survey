@@ -10,6 +10,7 @@ import {
   tenureBandLabel,
   type TenureBand,
 } from "@/lib/employee-attributes";
+import { parseTeamOffice } from "@/lib/team-slug";
 import {
   matchTeamId,
   parseEmployeeCsv,
@@ -25,6 +26,7 @@ export type EmployeeListItem = {
   teamName: string;
   role: string | null;
   tenureBand: TenureBand | null;
+  office: string | null;
 };
 
 export type EmployeeImportResult = {
@@ -133,8 +135,14 @@ export async function updateEmployeeAttributes(input: {
   employeeId: string;
   role: string;
   tenureBand: string;
+  office: string;
   actor?: { id: string; email: string };
-}): Promise<{ name: string; role: string | null; tenureBand: TenureBand | null }> {
+}): Promise<{
+  name: string;
+  role: string | null;
+  tenureBand: TenureBand | null;
+  office: string | null;
+}> {
   const parsedRole = parseRole(input.role);
   if (!parsedRole.ok) {
     throw new EmployeeAttributeError(parsedRole.error);
@@ -143,11 +151,19 @@ export async function updateEmployeeAttributes(input: {
   if (parsedTenure === "invalid") {
     throw new EmployeeAttributeError("Tenure must be <1yr, 1-3yr, or 3yr+.");
   }
+  const parsedOffice = parseTeamOffice(input.office);
+  if (!parsedOffice.ok) {
+    throw new EmployeeAttributeError("Office must be 80 characters or fewer.");
+  }
 
   return db.transaction(async (tx) => {
     const [person] = await tx
       .update(employees)
-      .set({ role: parsedRole.role, tenureBand: parsedTenure })
+      .set({
+        role: parsedRole.role,
+        tenureBand: parsedTenure,
+        office: parsedOffice.office,
+      })
       .where(eq(employees.id, input.employeeId))
       .returning({ id: employees.id, name: employees.name });
     if (!person) {
@@ -156,17 +172,23 @@ export async function updateEmployeeAttributes(input: {
     if (input.actor) {
       const roleLabel = parsedRole.role ?? "no role";
       const bandLabel = parsedTenure ? tenureBandLabel(parsedTenure) : "no tenure";
+      const officeLabel = parsedOffice.office ?? "no office";
       await recordAudit(
         {
           actorId: input.actor.id,
           actorEmail: input.actor.email,
           action: "employees.attributes_set",
-          summary: `Set ${person.name} to ${roleLabel}, ${bandLabel}`,
+          summary: `Set ${person.name} to ${roleLabel}, ${bandLabel}, ${officeLabel}`,
         },
         tx,
       );
     }
-    return { name: person.name, role: parsedRole.role, tenureBand: parsedTenure };
+    return {
+      name: person.name,
+      role: parsedRole.role,
+      tenureBand: parsedTenure,
+      office: parsedOffice.office,
+    };
   });
 }
 
@@ -177,12 +199,14 @@ function conflictSet(columns: EmployeeCsvColumns): {
   teamId: SQL;
   role?: SQL;
   tenureBand?: SQL;
+  office?: SQL;
 } {
   return {
     name: sql`excluded.name`,
     teamId: sql`excluded.team_id`,
     ...(columns.role ? { role: sql`excluded.role` } : {}),
     ...(columns.tenure ? { tenureBand: sql`excluded.tenure_band` } : {}),
+    ...(columns.office ? { office: sql`excluded.office` } : {}),
   };
 }
 
@@ -196,6 +220,7 @@ export async function listEmployees(): Promise<EmployeeListItem[]> {
       teamName: teams.name,
       role: employees.role,
       tenureBand: employees.tenureBand,
+      office: employees.office,
     })
     .from(employees)
     .innerJoin(teams, eq(employees.teamId, teams.id))
@@ -222,6 +247,7 @@ export async function importEmployeesFromCsv(
     teamId: string;
     role?: string | null;
     tenureBand?: TenureBand | null;
+    office?: string | null;
   }[] = [];
 
   for (const row of parsed.rows) {
@@ -239,6 +265,7 @@ export async function importEmployeesFromCsv(
       teamId,
       ...(parsed.columns.role ? { role: row.role } : {}),
       ...(parsed.columns.tenure ? { tenureBand: row.tenureBand } : {}),
+      ...(parsed.columns.office ? { office: row.office } : {}),
     });
   }
 
