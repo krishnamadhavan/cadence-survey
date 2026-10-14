@@ -12,6 +12,8 @@ type ReportFiltersProps = {
   role: string;
   tenure: string;
   office: string;
+  rows: string;
+  cols: string;
 };
 
 export function ReportFilters({
@@ -23,6 +25,8 @@ export function ReportFilters({
   role,
   tenure,
   office,
+  rows,
+  cols,
 }: ReportFiltersProps) {
   const router = useRouter();
   const roleOptions =
@@ -56,6 +60,12 @@ export function ReportFilters({
     }
     if (next.tenure) {
       params.set("tenure", next.tenure);
+    }
+    if (rows) {
+      params.set("rows", rows);
+    }
+    if (cols) {
+      params.set("cols", cols);
     }
     const query = params.toString();
     const path = `/admin/reports/${encodeURIComponent(token)}`;

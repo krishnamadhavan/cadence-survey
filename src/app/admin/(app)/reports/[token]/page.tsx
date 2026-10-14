@@ -6,10 +6,12 @@ import {
 } from "@/app/admin/(app)/s/[token]/export-buttons";
 import { ResponseImportForm } from "@/app/admin/(app)/s/[token]/response-import-form";
 import { ResultShare } from "@/app/admin/(app)/s/[token]/result-share";
+import { CrossGridControls } from "@/app/admin/(app)/reports/[token]/cross-grid-controls";
 import { ReportFilters } from "@/app/admin/(app)/reports/[token]/report-filters";
 import { PulseCompletion } from "@/components/admin/pulse-completion";
 import { listPulseParticipation } from "@/db/pulse-links";
 import { getResultShareToken } from "@/db/result-shares";
+import { getSurveyCrossGrid, type CrossGridCell, type SurveyCrossGrid } from "@/db/cross-grid";
 import { getSurveyReportDetail } from "@/db/reports";
 import { getAnonymityFloor } from "@/db/settings";
 import {
@@ -19,6 +21,12 @@ import {
   type TeamSummary,
 } from "@/db/results";
 import { getAdminSessionUser } from "@/lib/admin";
+import {
+  CROSS_AXES,
+  crossAxisLabel,
+  crossAxisNoun,
+  pinnedCrossAxes,
+} from "@/lib/cross-grid";
 import { tenureBandLabel, type TenureBand } from "@/lib/employee-attributes";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +38,8 @@ type ReportDetailPageProps = {
     role?: string | string[];
     tenure?: string | string[];
     office?: string | string[];
+    rows?: string | string[];
+    cols?: string | string[];
   }>;
 };
 
@@ -50,6 +60,8 @@ export default async function ReportDetailPage({
   const roleRaw = firstParam(query.role) ?? "";
   const tenureRaw = firstParam(query.tenure) ?? "";
   const officeRaw = firstParam(query.office) ?? "";
+  const rowsRaw = firstParam(query.rows) ?? "";
+  const colsRaw = firstParam(query.cols) ?? "";
   let detail: Awaited<ReturnType<typeof getSurveyReportDetail>> | null = null;
   let shareToken: string | null = null;
   let dbError = false;
@@ -103,6 +115,26 @@ export default async function ReportDetailPage({
   const anonymityFloor = await getAnonymityFloor();
   const publishable =
     results.roleVisibility === "all" || results.roleVisibility === "shown";
+  let cross: SurveyCrossGrid | null = null;
+  let crossFailed = false;
+  if (publishable) {
+    try {
+      cross = await getSurveyCrossGrid(selected.publicToken, {
+        teamId: teamRaw,
+        role: roleRaw,
+        tenure: tenureRaw,
+        office: officeRaw,
+        rows: rowsRaw,
+        cols: colsRaw,
+        floor: anonymityFloor,
+      });
+      if (!cross) {
+        crossFailed = true;
+      }
+    } catch {
+      crossFailed = true;
+    }
+  }
   const previousPublished =
     previousResults &&
     (previousResults.roleVisibility === "all" ||
@@ -232,6 +264,8 @@ export default async function ReportDetailPage({
             role={detail.role ?? ""}
             tenure={detail.tenure ?? tenureRaw}
             office={detail.office ?? officeRaw}
+            rows={rowsRaw}
+            cols={colsRaw}
           />
           <p className="text-xs text-ink/45">
             {label
@@ -336,6 +370,23 @@ export default async function ReportDetailPage({
           </ul>
         )}
       </section>
+
+      <CrossBreakdown
+        token={selected.publicToken}
+        office={detail.office ?? officeRaw}
+        teamId={detail.teamId ?? teamRaw}
+        role={detail.role ?? ""}
+        tenure={detail.tenure ?? tenureRaw}
+        floor={anonymityFloor}
+        cross={cross}
+        failed={crossFailed}
+        slice={{
+          teamId: detail.teamId,
+          role: detail.role,
+          tenure: detail.tenure,
+          office: detail.office,
+        }}
+      />
 
       <section className="mt-10">
         <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
@@ -762,7 +813,7 @@ function TrendList({
   );
 }
 
-function HeatCell({ value }: { value: number | null }) {
+function HeatCell({ value, detail }: { value: number | null; detail?: string }) {
   const tone =
     value === null ? "empty" : value < 3 ? "low" : value < 3.5 ? "watch" : "ok";
   const color =
@@ -778,8 +829,185 @@ function HeatCell({ value }: { value: number | null }) {
       className={`inline-flex min-w-12 items-center justify-center rounded-lg px-2 py-1 text-xs font-medium ${color}`}
     >
       {formatScore(value)}
+      {detail ? <span className="ml-1 font-normal opacity-80">{detail}</span> : null}
     </span>
   );
+}
+
+function CrossBreakdown({
+  token,
+  office,
+  teamId,
+  role,
+  tenure,
+  floor,
+  cross,
+  failed,
+  slice,
+}: {
+  token: string;
+  office: string;
+  teamId: string;
+  role: string;
+  tenure: string;
+  floor: number;
+  cross: SurveyCrossGrid | null;
+  failed: boolean;
+  slice: {
+    teamId: string | null;
+    role: string | null;
+    tenure: TenureBand | null;
+    office: string | null;
+  };
+}) {
+  const pins = pinnedCrossAxes(slice);
+  const axes = CROSS_AXES.filter((axis) => !pins[axis]).map((axis) => ({
+    value: axis,
+    label: crossAxisLabel(axis),
+  }));
+  const grid = cross?.kind === "grid" ? cross : null;
+  const pockets = strugglingPockets(grid?.cells ?? []);
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-sm font-medium tracking-wide text-ink/50 uppercase">
+        Cross breakdown
+      </h2>
+      {failed || !cross ? (
+        <p className="mt-4 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
+          Could not load this breakdown.
+        </p>
+      ) : cross.kind === "unavailable" ? (
+        <p className="mt-4 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
+          Clear a filter to cross two groups.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-ink/55">
+            Score for each {crossAxisNoun(cross.colAxis)} within each{" "}
+            {crossAxisNoun(cross.rowAxis)}. Low is under 3.0 and watch is under
+            3.5. The number beside the score is how many people answered. A
+            pocket under {floor} responses stays hidden, and so does a pocket
+            that would leave a smaller group exposed.
+          </p>
+          <div className="mt-3">
+            <CrossGridControls
+              token={token}
+              office={office}
+              teamId={teamId}
+              role={role}
+              tenure={tenure}
+              rows={cross.rowAxis}
+              cols={cross.colAxis}
+              axes={axes}
+            />
+          </div>
+          {cross.rows.length === 0 || cross.cols.length === 0 ? (
+            <p className="mt-4 rounded-2xl border border-ink/10 bg-white/70 px-5 py-4 text-sm text-ink/70">
+              Not enough responses in each pocket to show a grid.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-ink/10 bg-white/70">
+              <table className="w-full min-w-[32rem] text-left text-sm">
+                <thead className="border-b border-ink/10 text-ink/45">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">
+                      {crossAxisLabel(cross.rowAxis)}
+                    </th>
+                    {cross.cols.map((col) => (
+                      <th key={col.key} scope="col" className="px-3 py-3 font-medium">
+                        {col.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cross.rows.map((row) => (
+                    <tr key={row.key} className="border-t border-ink/5">
+                      <th scope="row" className="px-4 py-2 font-medium text-ink">
+                        {row.label}
+                      </th>
+                      {cross.cols.map((col) => {
+                        const cell = cross.cells.find(
+                          (item) => item.rowKey === row.key && item.colKey === col.key,
+                        );
+                        return (
+                          <td key={col.key} className="px-2 py-2">
+                            {cell ? (
+                              <HeatCell
+                                value={cell.averageScore}
+                                detail={String(cell.responseCount)}
+                              />
+                            ) : (
+                              <span className="inline-flex min-w-12 items-center justify-center rounded-lg bg-ink/5 px-2 py-1 text-xs text-ink/30">
+                                —
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {pockets.length > 0 ? (
+            <>
+              <h3 className="mt-4 text-sm font-medium text-ink/70">Struggling pockets</h3>
+              <ul className="mt-2 grid gap-2 md:grid-cols-2">
+                {pockets.map((pocket) => {
+                  const rowLabel =
+                    cross.rows.find((row) => row.key === pocket.rowKey)?.label ??
+                    pocket.rowKey;
+                  const colLabel =
+                    cross.cols.find((col) => col.key === pocket.colKey)?.label ??
+                    pocket.colKey;
+                  const health = scoreHealth(pocket.averageScore);
+                  return (
+                    <li
+                      key={`${pocket.rowKey}:${pocket.colKey}`}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-white/70 px-4 py-3 text-sm"
+                    >
+                      <span className="font-medium text-ink">
+                        {rowLabel} · {colLabel}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2 text-ink/60">
+                        {formatScore(pocket.averageScore)}
+                        <span className={healthClass(health)}>{healthLabel(health)}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function strugglingPockets(cells: CrossGridCell[]): CrossGridCell[] {
+  return cells
+    .filter((cell) => cell.averageScore !== null && cell.averageScore < 3.5)
+    .sort((a, b) => {
+      const byScore = (a.averageScore ?? 0) - (b.averageScore ?? 0);
+      if (byScore !== 0) {
+        return byScore;
+      }
+      return a.rowKey.localeCompare(b.rowKey) || a.colKey.localeCompare(b.colKey);
+    });
+}
+
+function scoreHealth(avg: number | null): TeamHealth {
+  if (avg === null || avg >= 3.5) {
+    return "ok";
+  }
+  if (avg < 3) {
+    return "low";
+  }
+  return "watch";
 }
 
 function QuestionCard({ question }: { question: QuestionResults }) {
